@@ -475,14 +475,14 @@
         }
         this.failed = true;
         this.onError?.(
-          '공유 방에 들어가지 못했습니다. 시험팀 탭이 열려 있는지, 회사망이 WebRTC 를 막지 않는지 확인하세요.'
+          '공유 방에 들어가지 못했습니다. 시험팀 탭이 열려 있는지 확인하세요. 사내망 PC만 안 되고 핸드폰은 되면, 회사 방화벽이 P2P를 막은 것입니다.'
         );
         try {
           peer.destroy();
         } catch {
           // ignore
         }
-      }, 20000);
+      }, 35000);
 
       peer.on('error', (err) => {
         if (this.intentionalClose || this.failed) {
@@ -673,6 +673,10 @@
   }
 
   function webRtcPeerOptions() {
+    const turnAuth = {
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    };
     return {
       host: '0.peerjs.com',
       port: 443,
@@ -682,6 +686,10 @@
         iceServers: [
           { urls: 'stun:stun.cloudflare.com:3478' },
           { urls: 'stun:stun.l.google.com:19302' },
+          Object.assign({ urls: 'turn:openrelay.metered.ca:80' }, turnAuth),
+          Object.assign({ urls: 'turn:openrelay.metered.ca:443' }, turnAuth),
+          Object.assign({ urls: 'turn:openrelay.metered.ca:443?transport=tcp' }, turnAuth),
+          Object.assign({ urls: 'turns:openrelay.metered.ca:443?transport=tcp' }, turnAuth),
         ],
       },
     };
