@@ -152,11 +152,14 @@ function syncConsoles(text) {
 
 ensurePane('1', '장비 1');
 
-window.addEventListener('resize', () => {
+function fitAllPanes() {
   for (const pane of panes) {
     pane.fit();
   }
-});
+}
+
+window.addEventListener('resize', fitAllPanes);
+window.visualViewport?.addEventListener('resize', fitAllPanes);
 
 bindQuickCommands();
 setCommandEnabled(false);
@@ -260,9 +263,8 @@ function connectShare() {
     els.name.value = shareClient.name;
     setStatus(true, shareClient.name + ' · 공유 접속됨');
     writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 명령을 넣을 콘솔 칸을 선택한 뒤 보내세요.', 'green');
-    for (const pane of panes) {
-      pane.fit();
-    }
+    fitAllPanes();
+    setTimeout(fitAllPanes, 200);
   };
 
   shareClient.onConsoles = (text) => {

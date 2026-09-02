@@ -568,20 +568,85 @@ body {
 }
 
 @media (max-width: 720px) {
-  .workspace {
-    flex-direction: column;
+  html,
+  body:has(.guest-app) {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
   }
 
-  .chat-panel {
+  .guest-app {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .guest-app .toolbar {
+    padding: 6px 8px;
+    gap: 6px 8px;
+  }
+
+  .guest-app .toolbar-group + .toolbar-group {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .guest-app .share-banner {
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+
+  .guest-app .command-buttons {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .guest-app .command-custom {
+    margin-left: 0;
     width: 100%;
-    height: 28vh;
+  }
+
+  .guest-app .command-custom label {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .guest-app .workspace {
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .guest-app .console-stack {
+    flex-direction: column;
+    height: 58vh;
+    min-height: 240px;
+    flex: 0 0 auto;
+  }
+
+  .guest-app .console-pane {
+    min-width: 0;
+    min-height: 200px;
+    border-right: 0;
+    border-bottom: 1px solid var(--toolbar-border);
+  }
+
+  .guest-app .console-pane-find-btn,
+  .guest-app .console-pane-log-btn {
+    display: none;
+  }
+
+  .guest-app .chat-panel,
+  .guest-app .cmd-panel {
+    width: 100%;
+    height: 220px;
+    min-height: 180px;
+    flex: 0 0 auto;
     border-left: 0;
     border-top: 1px solid var(--toolbar-border);
-  }
-
-  .cmd-panel {
-    width: 100%;
-    height: 24vh;
   }
 
   .guest-app .toolbar-commands {
@@ -590,6 +655,8 @@ body {
     bottom: 0;
     z-index: 6;
     background: var(--toolbar-bg);
+    border-top: 1px solid var(--toolbar-border);
+    border-bottom: 0;
   }
 
   .guest-app > .toolbar:not(.toolbar-commands) {
@@ -603,7 +670,5 @@ body {
 
   .guest-app .workspace {
     order: 3;
-    min-height: 180px;
-    flex: 1 1 0;
   }
 }
