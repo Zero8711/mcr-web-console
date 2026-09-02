@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>웹 시리얼 콘솔</title>
+    <link rel="stylesheet" href="./vendor/xterm.css" />
+    <link rel="stylesheet" href="./src/style.css?v=20260901r" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="toolbar">
+        <div class="toolbar-group">
+          <button id="btn-connect" type="button" class="btn btn-primary">연결</button>
+          <button id="btn-disconnect" type="button" class="btn" disabled>해제</button>
+          <button id="btn-add-console" type="button" class="btn">콘솔 추가</button>
+          <button id="btn-remove-console" type="button" class="btn" disabled>콘솔 빼기</button>
+        </div>
+
+        <div class="toolbar-group">
+          <label>
+            Baud
+            <select id="sel-baud">
+              <option value="9600">9600</option>
+              <option value="19200">19200</option>
+              <option value="38400">38400</option>
+              <option value="57600">57600</option>
+              <option value="115200" selected>115200</option>
+              <option value="230400">230400</option>
+            </select>
+          </label>
+
+          <label>
+            Data
+            <select id="sel-data-bits">
+              <option value="8" selected>8</option>
+              <option value="7">7</option>
+            </select>
+          </label>
+
+          <label>
+            Parity
+            <select id="sel-parity">
+              <option value="none" selected>none</option>
+              <option value="even">even</option>
+              <option value="odd">odd</option>
+            </select>
+          </label>
+
+          <label>
+            Stop
+            <select id="sel-stop-bits">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="toolbar-group">
+          <label>
+            개행
+            <select id="sel-newline">
+              <option value="cr" selected>CR</option>
+              <option value="lf">LF</option>
+              <option value="crlf">CR+LF</option>
+            </select>
+          </label>
+
+          <label class="checkbox">
+            <input id="chk-echo" type="checkbox" />
+            Local Echo
+          </label>
+        </div>
+
+        <div class="toolbar-group">
+          <button id="btn-clear" type="button" class="btn">지우기</button>
+        </div>
+
+        <div class="toolbar-status">
+          <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">연결 안 됨</span>
+        </div>
+      </header>
+
+      <header class="toolbar toolbar-aging">
+        <div class="toolbar-group">
+          <span id="aging-target" class="aging-target">대상: 장비 1</span>
+          <button id="btn-log-file" type="button" class="btn">저장 파일</button>
+          <button id="btn-log-folder" type="button" class="btn">저장 폴더</button>
+          <label class="checkbox">
+            <input id="chk-log-watch" type="checkbox" />
+            이상로그 감시
+          </label>
+          <label class="toolbar-keywords">
+            키워드
+            <input
+              id="txt-log-keywords"
+              type="text"
+              spellcheck="false"
+              placeholder="선택한 장비만. 쉼표로 구분"
+              title="지금 대상 칸만 감시합니다. 예: error, fail"
+            />
+          </label>
+          <button id="btn-log-stop" type="button" class="btn" disabled>수집 중단</button>
+        </div>
+
+        <div class="toolbar-status">
+          <span id="log-status-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="log-status-text">저장 위치 없음</span>
+        </div>
+      </header>
+
+      <header class="toolbar toolbar-commands">
+        <div id="quick-commands" class="toolbar-group command-buttons"></div>
+        <div class="toolbar-group command-custom">
+          <label>
+            명령
+            <input
+              id="txt-custom-command"
+              type="text"
+              spellcheck="false"
+              placeholder="선택한 콘솔로 보내기"
+              disabled
+            />
+          </label>
+          <button id="btn-send-command" type="button" class="btn" disabled>보내기</button>
+        </div>
+      </header>
+
+      <header class="toolbar toolbar-share">
+        <div class="toolbar-group">
+          <label>
+            이름
+            <input
+              id="txt-share-name"
+              type="text"
+              maxlength="20"
+              spellcheck="false"
+              placeholder="본인 이름"
+              autocomplete="nickname"
+            />
+          </label>
+          <button id="btn-share-start" type="button" class="btn" disabled>공유 시작</button>
+          <button id="btn-share-stop" type="button" class="btn" disabled>공유 종료</button>
+          <button id="btn-share-copy" type="button" class="btn" disabled>링크 복사</button>
+        </div>
+        <div class="toolbar-group">
+          <label>
+            공유기 사내 IP
+            <input
+              id="txt-share-wan"
+              type="text"
+              spellcheck="false"
+              placeholder="예: 10.10.20.55"
+              title="사내망이 ipTIME에 준 주소입니다. 노트북 IP가 아닙니다. ipTIME에서 TCP 8765 를 이 PC로 포트포워드 한 뒤 적으세요."
+            />
+          </label>
+        </div>
+        <div class="toolbar-group toolbar-share-url">
+          <label>
+            개발팀 링크
+            <input id="txt-share-url" type="text" readonly spellcheck="false" placeholder="COM 연결 후 공유 시작" />
+          </label>
+        </div>
+        <div class="toolbar-status">
+          <span id="share-peers">접속 0명</span>
+        </div>
+      </header>
+
+      <p id="browser-warning" class="browser-warning" hidden>
+        이 브라우저는 Web Serial API를 지원하지 않습니다. Chrome 또는 Edge의 https:// 주소로 열어 주세요.
+      </p>
+      <p id="pages-hint" class="share-banner" hidden>
+        이 주소는 COM 만 됩니다. 출장에서 USB 만 쓰려면 이 페이지에서 [연결] 하면 됩니다.
+        다른 사람이 같이 보려면 연결.bat 을 실행하고
+        http://127.0.0.1:8765/ 에서 [공유 시작] 하세요. 사외면 양쪽 모두 사내 VPN 을 켠 뒤 VPN 주소 링크를 보내세요.
+      </p>
+      <p id="share-warning" class="share-banner" hidden>
+        이 링크를 가진 사람은 장비에 명령을 넣을 수 있습니다. 끝나면 공유 종료를 누르세요.
+        장비가 두 대면 [콘솔 추가] 로 COM 을 하나 더 연 뒤 같은 링크를 보내면 됩니다.
+      </p>
+
+      <div class="workspace">
+        <div id="console-stack" class="console-stack"></div>
+        <aside id="chat-panel" class="chat-panel" hidden>
+          <div class="chat-header">채팅</div>
+          <div id="chat-log" class="chat-log"></div>
+          <form id="chat-form" class="chat-form">
+            <input
+              id="txt-chat"
+              type="text"
+              spellcheck="false"
+              placeholder="대화 입력"
+            />
+            <button type="submit" class="btn">보내기</button>
+          </form>
+        </aside>
+        <aside id="cmd-panel" class="chat-panel cmd-panel" hidden>
+          <div class="chat-header">명령 기록</div>
+          <div id="cmd-log" class="chat-log"></div>
+          <form id="cmd-form" class="chat-form">
+            <input
+              id="txt-panel-cmd"
+              type="text"
+              spellcheck="false"
+              placeholder="명령 입력"
+              disabled
+            />
+            <button id="btn-panel-cmd" type="submit" class="btn" disabled>보내기</button>
+          </form>
+        </aside>
+      </div>
+    </div>
+
+    <div id="alert-modal" class="alert-modal" hidden>
+      <div class="alert-modal-box" role="dialog" aria-labelledby="alert-modal-title">
+        <h2 id="alert-modal-title">이상로그 감지</h2>
+        <p id="alert-modal-console" class="alert-modal-console"></p>
+        <p id="alert-modal-time" class="alert-modal-time"></p>
+        <pre id="alert-modal-line" class="alert-modal-line"></pre>
+        <p id="alert-modal-file" class="alert-modal-file"></p>
+        <button id="btn-alert-ok" type="button" class="btn btn-primary">확인</button>
+      </div>
+    </div>
+
+    <script src="./vendor/xterm.js"></script>
+    <script src="./vendor/addon-fit.js"></script>
+    <script src="./src/serial.js"></script>
+    <script src="./src/aging-log.js?v=20260901i"></script>
+    <script src="./src/commands.js"></script>
+    <script src="./src/log-view.js?v=20260901k"></script>
+    <script src="./src/share.js?v=20260902c"></script>
+    <script src="./src/console-find.js?v=20260901m"></script>
+    <script src="./src/session-log.js?v=20260901o"></script>
+    <script src="./src/console-pane.js?v=20260901r"></script>
+    <script src="./src/main.js?v=20260902c"></script>
+  </body>
+</html>

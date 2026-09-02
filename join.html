@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>웹 시리얼 콘솔 · 원격</title>
+    <link rel="stylesheet" href="./vendor/xterm.css" />
+    <link rel="stylesheet" href="./src/style.css?v=20260901r" />
+  </head>
+  <body>
+    <div id="app" class="guest-app">
+      <header class="toolbar">
+        <div class="toolbar-group">
+          <label>
+            이름
+            <input
+              id="txt-guest-name"
+              type="text"
+              value=""
+              maxlength="20"
+              spellcheck="false"
+              placeholder="본인 이름"
+              autocomplete="nickname"
+            />
+          </label>
+          <button id="btn-join" type="button" class="btn btn-primary">접속</button>
+          <button id="btn-clear" type="button" class="btn">지우기</button>
+        </div>
+
+        <div class="toolbar-status">
+          <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">접속 중…</span>
+          <span id="share-peers">접속 0명</span>
+        </div>
+      </header>
+
+      <header class="toolbar toolbar-commands">
+        <div id="quick-commands" class="toolbar-group command-buttons"></div>
+        <div class="toolbar-group command-custom">
+          <label>
+            명령
+            <input
+              id="txt-custom-command"
+              type="text"
+              spellcheck="false"
+              placeholder="선택한 콘솔로 보내기"
+              disabled
+            />
+          </label>
+          <button id="btn-send-command" type="button" class="btn" disabled>보내기</button>
+        </div>
+      </header>
+
+      <p id="browser-warning" class="browser-warning" hidden></p>
+      <p class="share-banner">
+        같은 링크로 여러 명이 들어올 수 있습니다. 이름을 적은 뒤 [접속] 을 누르세요.
+        장비가 여러 대면 콘솔 칸이 같이 생깁니다. 명령을 넣을 칸을 클릭한 뒤 보내세요.
+        대화는 오른쪽 채팅을 쓰세요. 명령 기록은 채팅 오른쪽에 남습니다.
+      </p>
+
+      <div class="workspace">
+        <div id="console-stack" class="console-stack"></div>
+        <aside id="chat-panel" class="chat-panel">
+          <div class="chat-header">채팅</div>
+          <div id="chat-log" class="chat-log"></div>
+          <form id="chat-form" class="chat-form">
+            <input
+              id="txt-chat"
+              type="text"
+              spellcheck="false"
+              placeholder="대화 입력"
+            />
+            <button type="submit" class="btn">보내기</button>
+          </form>
+        </aside>
+        <aside id="cmd-panel" class="chat-panel cmd-panel">
+          <div class="chat-header">명령 기록</div>
+          <div id="cmd-log" class="chat-log"></div>
+          <form id="cmd-form" class="chat-form">
+            <input
+              id="txt-panel-cmd"
+              type="text"
+              spellcheck="false"
+              placeholder="명령 입력"
+              disabled
+            />
+            <button id="btn-panel-cmd" type="submit" class="btn" disabled>보내기</button>
+          </form>
+        </aside>
+      </div>
+    </div>
+
+    <script src="./vendor/xterm.js"></script>
+    <script src="./vendor/addon-fit.js"></script>
+    <script src="./src/commands.js"></script>
+    <script src="./src/log-view.js?v=20260901k"></script>
+    <script src="./src/share.js?v=20260902c"></script>
+    <script src="./src/console-find.js?v=20260901m"></script>
+    <script src="./src/session-log.js?v=20260901o"></script>
+    <script src="./src/console-pane.js?v=20260901r"></script>
+    <script src="./src/join.js?v=20260902c"></script>
+  </body>
+</html>
