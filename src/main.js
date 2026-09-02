@@ -239,8 +239,14 @@ window.addEventListener('resize', () => {
   }
 });
 
-if (!ShareUtil.isLocalRelayOrigin() && els.pagesHint) {
-  els.pagesHint.hidden = false;
+if (!ShareUtil.isLocalRelayOrigin()) {
+  if (els.pagesHint) {
+    els.pagesHint.hidden = false;
+  }
+  const wanGroup = els.shareWan?.closest('.toolbar-group');
+  if (wanGroup) {
+    wanGroup.hidden = true;
+  }
 }
 
 const serialBlockReason = getSerialBlockReason();
@@ -653,7 +659,7 @@ function setButtonState(connected) {
   if (els.panelCmdSend) {
     els.panelCmdSend.disabled = !connected;
   }
-  const canShare = ShareUtil.isLocalRelayOrigin() && anyOpen() && !shareClient;
+  const canShare = anyOpen() && !shareClient;
   els.shareStart.disabled = !canShare;
   els.shareStop.disabled = !shareClient;
   els.shareCopy.disabled = !shareClient || !shareUrl;
@@ -722,12 +728,6 @@ function sendHostChat(text) {
 }
 
 async function startShare() {
-  if (!ShareUtil.isLocalRelayOrigin()) {
-    currentPane()?.term.writeln(
-      '\x1b[33m[안내] GitHub Pages 에서는 공유가 없습니다. 연결.bat 을 실행하고 http://127.0.0.1:8765/ 에서 공유하세요. 사외면 VPN 접속 후 상대도 VPN 이어야 합니다.\x1b[0m'
-    );
-    return;
-  }
   if (!anyOpen()) {
     currentPane()?.term.writeln('\x1b[33m[안내] 먼저 장비를 연결하세요.\x1b[0m');
     return;
@@ -744,24 +744,30 @@ async function startShare() {
   }
   saveHostName(name);
 
-  let info;
-  try {
-    info = await fetchShareInfo();
-  } catch (err) {
-    currentPane()?.term.writeln('');
-    currentPane()?.term.writeln(`\x1b[31m[공유] ${err.message}\x1b[0m`);
-    return;
-  }
-
-  if (els.shareWan && !String(els.shareWan.value || '').trim()) {
-    const autoWanHost = wanHostFromInfo(info);
-    if (autoWanHost) {
-      els.shareWan.value = autoWanHost;
-    }
-  }
-
   const room = ShareUtil.makeRoomToken();
-  const shareUrls = allShareUrls(room, info);
+  let info = null;
+  let shareUrls;
+
+  if (ShareUtil.isLocalRelayOrigin()) {
+    try {
+      info = await fetchShareInfo();
+    } catch (err) {
+      currentPane()?.term.writeln('');
+      currentPane()?.term.writeln(`\x1b[31m[공유] ${err.message}\x1b[0m`);
+      return;
+    }
+
+    if (els.shareWan && !String(els.shareWan.value || '').trim()) {
+      const autoWanHost = wanHostFromInfo(info);
+      if (autoWanHost) {
+        els.shareWan.value = autoWanHost;
+      }
+    }
+    shareUrls = allShareUrls(room, info);
+  } else {
+    shareUrls = [ShareUtil.joinUrlForRoom(room)];
+  }
+
   shareUrl = shareUrls[0];
   els.shareUrl.value = shareUrl;
   els.shareWarning.hidden = false;
@@ -783,7 +789,9 @@ async function startShare() {
     for (const url of shareUrls) {
       pane?.term.writeln(`\x1b[32m       ${url}\x1b[0m`);
     }
-    if (info?.wan) {
+    if (!ShareUtil.isLocalRelayOrigin()) {
+      pane?.term.writeln('\x1b[33m[공유] 이 주소만 보내면 됩니다. 이 탭을 닫으면 끊깁니다. 회사망이 P2P 를 막으면 접속이 실패할 수 있습니다.\x1b[0m');
+    } else if (info?.wan) {
       pane?.term.writeln('\x1b[33m[공유] UPnP 로 공유기 TCP 8765 를 열었습니다. 맨 위 링크를 쓰세요. 안 열리면 공유기 UPnP 또는 수동 포워드를 확인하세요.\x1b[0m');
     } else if (readWanBase(info?.port)) {
       pane?.term.writeln('\x1b[33m[공유] 공유기 사내 IP 링크를 맨 위에 넣었습니다. ipTIME 에서 TCP 8765 를 이 노트북으로 포트포워드 하세요.\x1b[0m');

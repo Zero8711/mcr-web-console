@@ -42,6 +42,12 @@
       if (this.transport === 'http') {
         return this.connected && Boolean(this.sid);
       }
+      if (this.transport === 'webrtc') {
+        if (this.isHost) {
+          return this.connected && Boolean(this.peer) && !this.peer.destroyed;
+        }
+        return this.connected && Boolean(this.rtcHostConn) && this.rtcHostConn.open;
+      }
       return Boolean(this.socket) && this.socket.readyState === WebSocket.OPEN;
     }
 
@@ -52,6 +58,14 @@
       this.intentionalClose = false;
       this.sid = '';
       this.transport = '';
+      this.rtcGuests = [];
+      this.rtcHostConn = null;
+      this.lastConsoles = '';
+
+      if (!isLocalRelayOrigin()) {
+        this.connectWebRtc();
+        return;
+      }
 
       if (this.role === 'guest') {
         this.connectHttp();
@@ -360,8 +374,21 @@
       if (!payload) {
         return;
       }
+      if (payload.type === 'consoles') {
+        this.lastConsoles = payload.text || '';
+      }
       if (this.transport === 'http') {
         this.sendHttp(payload);
+        return;
+      }
+      if (this.transport === 'webrtc') {
+        if (!payload.from && (payload.type === 'chat' || payload.type === 'cmdlog')) {
+          payload = Object.assign({}, payload, { from: this.name });
+        }
+        this.sendRtc(payload);
+        if (this.isHost && (payload.type === 'chat' || payload.type === 'cmdlog')) {
+          this.dispatchMessage(payload);
+        }
         return;
       }
       if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -397,6 +424,16 @@
         clearTimeout(this.readyTimer);
         this.readyTimer = null;
       }
+      if (this.peer) {
+        try {
+          this.peer.destroy();
+        } catch {
+          // already closed
+        }
+        this.peer = null;
+      }
+      this.rtcGuests = [];
+      this.rtcHostConn = null;
       if (wasHttp && sid) {
         fetch('/api/share/bye?sid=' + encodeURIComponent(sid), {
           method: 'POST',
@@ -414,6 +451,210 @@
         // already closed
       }
     }
+
+    /**
+     * GitHub Pages 등 정적 호스팅에서는 로컬 중계가 없다.
+     * 시험팀 브라우저가 방이 되고, 개발팀은 WebRTC 로 붙는다.
+     */
+    connectWebRtc() {
+      this.transport = 'webrtc';
+      if (typeof global.Peer !== 'function') {
+        this.failed = true;
+        this.onError?.('공유 라이브러리(PeerJS)를 불러오지 못했습니다. 페이지를 새로 고침하세요.');
+        return;
+      }
+
+      this.onOpen?.();
+      const peerId = this.isHost ? webRtcHostId(this.room) : undefined;
+      const peer = new global.Peer(peerId, webRtcPeerOptions());
+      this.peer = peer;
+
+      this.readyTimer = setTimeout(() => {
+        if (this.connected || this.failed || this.intentionalClose) {
+          return;
+        }
+        this.failed = true;
+        this.onError?.(
+          '공유 방에 들어가지 못했습니다. 시험팀 탭이 열려 있는지, 회사망이 WebRTC 를 막지 않는지 확인하세요.'
+        );
+        try {
+          peer.destroy();
+        } catch {
+          // ignore
+        }
+      }, 20000);
+
+      peer.on('error', (err) => {
+        if (this.intentionalClose || this.failed) {
+          return;
+        }
+        this.failed = true;
+        const text = err?.type === 'unavailable-id'
+          ? '같은 방 토큰이 이미 사용 중입니다. 공유를 다시 시작하세요.'
+          : '브라우저 간 공유에 실패했습니다. 방화벽이 P2P 를 막으면 접속되지 않습니다.';
+        this.onError?.(text);
+      });
+
+      peer.on('open', () => {
+        if (this.intentionalClose) {
+          return;
+        }
+        if (this.isHost) {
+          this.markReady();
+          this.emitRtcPeers();
+          return;
+        }
+        this.openRtcGuestLink();
+      });
+
+      if (this.isHost) {
+        peer.on('connection', (conn) => {
+          this.acceptRtcGuest(conn);
+        });
+      }
+    }
+
+    openRtcGuestLink() {
+      const conn = this.peer.connect(webRtcHostId(this.room), {
+        reliable: true,
+        metadata: { name: this.name },
+      });
+      this.rtcHostConn = conn;
+
+      conn.on('open', () => {
+        if (this.intentionalClose) {
+          return;
+        }
+        this.sendRtc({
+          type: 'hello',
+          role: 'guest',
+          room: this.room,
+          name: this.name,
+        });
+        this.markReady();
+      });
+
+      conn.on('data', (data) => {
+        this.handleMessage(data);
+      });
+
+      conn.on('close', () => {
+        if (this.intentionalClose || this.failed) {
+          return;
+        }
+        this.connected = false;
+        this.onClosed?.('시험팀 공유가 종료되었습니다.');
+      });
+
+      conn.on('error', () => {
+        if (this.intentionalClose || this.failed) {
+          return;
+        }
+        this.failed = true;
+        this.onError?.('시험팀 탭에 연결하지 못했습니다. 공유가 켜져 있는지 확인하세요.');
+      });
+    }
+
+    acceptRtcGuest(conn) {
+      if (this.rtcGuests.length >= 20) {
+        try {
+          conn.close();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
+      conn.on('open', () => {
+        if (this.intentionalClose) {
+          return;
+        }
+        const name = String(conn.metadata?.name || '개발팀').slice(0, 20);
+        this.rtcGuests.push({ conn, name });
+        this.sendRtcTo(conn, { type: 'welcome' });
+        if (this.lastConsoles) {
+          this.sendRtcTo(conn, { type: 'consoles', text: this.lastConsoles });
+        }
+        this.emitRtcPeers();
+      });
+
+      conn.on('data', (data) => {
+        this.handleRtcGuestData(conn, data);
+      });
+
+      conn.on('close', () => {
+        this.rtcGuests = this.rtcGuests.filter((item) => item.conn !== conn);
+        this.emitRtcPeers();
+      });
+    }
+
+    handleRtcGuestData(conn, data) {
+      let msg = data;
+      if (typeof data === 'string') {
+        try {
+          msg = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!msg || typeof msg !== 'object') {
+        return;
+      }
+
+      if (msg.type === 'hello') {
+        const guest = this.rtcGuests.find((item) => item.conn === conn);
+        if (guest && msg.name) {
+          guest.name = String(msg.name).replace(/\s+/g, ' ').trim().slice(0, 20) || guest.name;
+          this.emitRtcPeers();
+        }
+        return;
+      }
+
+      const guest = this.rtcGuests.find((item) => item.conn === conn);
+      if (guest) {
+        msg = Object.assign({}, msg, { from: guest.name });
+      }
+      this.dispatchMessage(msg);
+      if (msg.type === 'chat' || msg.type === 'cmdlog' || msg.type === 'rename') {
+        this.sendRtc(msg);
+      }
+    }
+
+    sendRtc(payload, exceptConn) {
+      const raw = JSON.stringify(payload);
+      if (this.isHost) {
+        for (const guest of this.rtcGuests) {
+          if (exceptConn && guest.conn === exceptConn) {
+            continue;
+          }
+          this.sendRtcRaw(guest.conn, raw);
+        }
+        return;
+      }
+      this.sendRtcRaw(this.rtcHostConn, raw);
+    }
+
+    sendRtcTo(conn, payload) {
+      this.sendRtcRaw(conn, JSON.stringify(payload));
+    }
+
+    sendRtcRaw(conn, raw) {
+      if (!conn || !conn.open) {
+        return;
+      }
+      try {
+        conn.send(raw);
+      } catch {
+        // 끊긴 상대는 close 에서 정리
+      }
+    }
+
+    emitRtcPeers() {
+      const guests = this.rtcGuests.map((item) => item.name);
+      const info = { guests, guestCount: guests.length };
+      this.onPeers?.(info);
+      this.sendRtc({ type: 'peers', guests, guestCount: guests.length });
+    }
   }
 
   function sleepMs(ms) {
@@ -425,6 +666,29 @@
   function websocketUrl() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${location.host}/ws`;
+  }
+
+  function webRtcHostId(room) {
+    return 'mcr' + String(room || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+  }
+
+  function webRtcPeerOptions() {
+    return {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          { urls: 'stun:stun.l.google.com:19302' },
+        ],
+      },
+    };
+  }
+
+  function joinUrlForRoom(room) {
+    return new URL('join.html?room=' + encodeURIComponent(room), location.href).href;
   }
 
   function makeRoomToken() {
@@ -574,8 +838,8 @@
   }
 
   /**
-   * 연결.bat 이 연 주소만 중계(/api, /ws)가 있다.
-   * GitHub Pages 등 정적 호스팅은 COM 만 되고 공유는 불가.
+   * 연결.bat 주소는 로컬 TCP 중계.
+   * 그 외(GitHub Pages)는 브라우저 간 WebRTC 공유.
    */
   function isLocalRelayOrigin() {
     const host = String(location.hostname || '').toLowerCase();
@@ -593,6 +857,7 @@
     decodeConsoles,
     peerSummary,
     isLocalRelayOrigin,
+    joinUrlForRoom,
     ROOM_KEY,
   };
 })(window);

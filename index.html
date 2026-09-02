@@ -171,9 +171,8 @@
         이 브라우저는 Web Serial API를 지원하지 않습니다. Chrome 또는 Edge의 https:// 주소로 열어 주세요.
       </p>
       <p id="pages-hint" class="share-banner" hidden>
-        이 주소는 COM 만 됩니다. 출장에서 USB 만 쓰려면 이 페이지에서 [연결] 하면 됩니다.
-        다른 사람이 같이 보려면 연결.bat 을 실행하고
-        http://127.0.0.1:8765/ 에서 [공유 시작] 하세요. 사외면 양쪽 모두 사내 VPN 을 켠 뒤 VPN 주소 링크를 보내세요.
+        COM 연결 후 [공유 시작] 하면 이 사이트의 링크가 만들어집니다. 그 주소만 보내면 다른 사람이 같은 콘솔을 볼 수 있습니다.
+        이 탭을 닫으면 공유가 끊깁니다.
       </p>
       <p id="share-warning" class="share-banner" hidden>
         이 링크를 가진 사람은 장비에 명령을 넣을 수 있습니다. 끝나면 공유 종료를 누르세요.
@@ -229,10 +228,11 @@
     <script src="./src/aging-log.js?v=20260901i"></script>
     <script src="./src/commands.js"></script>
     <script src="./src/log-view.js?v=20260901k"></script>
-    <script src="./src/share.js?v=20260902c"></script>
+    <script src="./vendor/peerjs.min.js"></script>
+    <script src="./src/share.js?v=20260902d"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
     <script src="./src/console-pane.js?v=20260901r"></script>
-    <script src="./src/main.js?v=20260902c"></script>
+    <script src="./src/main.js?v=20260902d"></script>
   </body>
 </html>

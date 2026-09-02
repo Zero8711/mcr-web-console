@@ -162,14 +162,7 @@ bindQuickCommands();
 setCommandEnabled(false);
 restoreGuestName();
 
-if (!ShareUtil.isLocalRelayOrigin()) {
-  els.warning.hidden = false;
-  els.warning.textContent =
-    'GitHub Pages 의 join.html 로는 시험팀 COM 에 붙을 수 없습니다. 연결.bat 이 만든 링크(시험팀 IP:8765)로 여세요. 사외면 VPN 접속 후 그 링크를 엽니다.';
-  els.statusText.textContent = '중계 없음';
-  els.join.disabled = true;
-  writeGuide('[안내] GitHub Pages 는 원격 공유 중계가 없습니다. 연결.bat 이 만든 링크로 여세요.');
-} else if (!room) {
+if (!room) {
   els.warning.hidden = false;
   els.warning.textContent = '공유 링크에 방 토큰이 없습니다. 시험팀이 복사한 URL 로 열어 주세요.';
   els.statusText.textContent = '방 없음';
@@ -231,7 +224,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 function connectShare() {
-  if (!ShareUtil.isLocalRelayOrigin() || !room) {
+  if (!room) {
     return;
   }
 
