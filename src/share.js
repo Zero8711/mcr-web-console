@@ -834,7 +834,7 @@
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  const SHARE_PASSWORD_HINT = '영문 대문자, 소문자, 숫자, 특수문자를 섞어 8자 이상';
+  const SHARE_PASSWORD_HINT = '영문, 숫자, 특수문자를 섞어 8자 이상';
 
   function validateSharePassword(value) {
     const text = String(value || '');
@@ -847,11 +847,8 @@
     if (/\s/.test(text)) {
       return '비밀번호에 공백은 넣을 수 없습니다.';
     }
-    if (!/[A-Z]/.test(text)) {
-      return '영문 대문자가 들어가야 합니다.';
-    }
-    if (!/[a-z]/.test(text)) {
-      return '영문 소문자가 들어가야 합니다.';
+    if (!/[A-Za-z]/.test(text)) {
+      return '영문이 들어가야 합니다.';
     }
     if (!/[0-9]/.test(text)) {
       return '숫자가 들어가야 합니다.';

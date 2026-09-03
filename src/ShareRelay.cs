@@ -1184,7 +1184,7 @@ public class ShareRelay
 
     private static string SharePasswordRuleMessage()
     {
-        return "비밀번호는 영문 대문자, 소문자, 숫자, 특수문자를 섞어 8자 이상이어야 합니다.";
+        return "비밀번호는 영문, 숫자, 특수문자를 섞어 8자 이상이어야 합니다.";
     }
 
     private static bool IsSharePasswordOk(string value)
@@ -1194,8 +1194,7 @@ public class ShareRelay
             return false;
         }
 
-        var hasUpper = false;
-        var hasLower = false;
+        var hasLetter = false;
         var hasDigit = false;
         var hasSpecial = false;
         for (var i = 0; i < value.Length; i++)
@@ -1205,13 +1204,9 @@ public class ShareRelay
             {
                 return false;
             }
-            if (ch >= 'A' && ch <= 'Z')
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'))
             {
-                hasUpper = true;
-            }
-            else if (ch >= 'a' && ch <= 'z')
-            {
-                hasLower = true;
+                hasLetter = true;
             }
             else if (ch >= '0' && ch <= '9')
             {
@@ -1223,7 +1218,7 @@ public class ShareRelay
             }
         }
 
-        return hasUpper && hasLower && hasDigit && hasSpecial;
+        return hasLetter && hasDigit && hasSpecial;
     }
 
     private static bool PasswordMatches(string expected, string given)
