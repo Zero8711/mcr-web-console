@@ -282,10 +282,11 @@ function connectShare() {
     return;
   }
 
-  const lockMessage = ShareUtil.storedPassLockMessage(room);
-  if (lockMessage) {
-    setStatus(false, lockMessage);
-    writeGuide('[안내] ' + lockMessage);
+  const remainMs = ShareUtil.storedPassRemainMs(room);
+  if (remainMs > 0) {
+    const text = passLockStatusText(remainMs);
+    setStatus(false, text);
+    writeGuide('[안내] ' + text);
     schedulePassLockUnlock();
     refreshJoinButton();
     return;
@@ -308,7 +309,6 @@ function connectShare() {
 
   shareClient.onOpen = () => {
     setStatus(false, '방 입장 중…');
-    writeGuide('[공유] 시험팀 방에 들어가는 중입니다.');
   };
 
   shareClient.onReady = () => {
@@ -389,7 +389,16 @@ function connectShare() {
     els.join.textContent = '접속';
     if (isPassFailMessage(message)) {
       ShareUtil.applyPassErrorLocal(room, message);
-      schedulePassLockUnlock();
+      const remain = ShareUtil.storedPassRemainMs(room);
+      if (remain > 0) {
+        writeGuide('[공유] ' + passLockStatusText(remain), 'red');
+        schedulePassLockUnlock();
+      } else {
+        setStatus(false, message);
+        writeGuide('[공유] ' + message, 'red');
+      }
+      refreshJoinButton();
+      return;
     }
     refreshJoinButton();
     setStatus(false, message || '접속 실패');
@@ -531,27 +540,50 @@ function isPassFailMessage(message) {
   return text.indexOf('비밀번호가 다릅니다') >= 0 || text.indexOf('1분 후') >= 0;
 }
 
-function schedulePassLockUnlock() {
+function formatRemain(ms) {
+  const total = Math.max(0, Math.ceil(Number(ms) / 1000));
+  const min = Math.floor(total / 60);
+  const sec = total % 60;
+  if (min <= 0) {
+    return total + '초';
+  }
+  return min + '분 ' + String(sec).padStart(2, '0') + '초';
+}
+
+function passLockStatusText(ms) {
+  return '5회 틀렸습니다. 다시 시도까지 ' + formatRemain(ms);
+}
+
+function stopPassLockTimer() {
   if (passLockTimer) {
-    clearTimeout(passLockTimer);
+    clearInterval(passLockTimer);
     passLockTimer = null;
   }
+}
+
+function schedulePassLockUnlock() {
+  stopPassLockTimer();
   if (!room) {
     return;
   }
-  const remain = ShareUtil.storedPassRemainMs(room);
-  if (remain <= 0) {
-    return;
-  }
-  setStatus(false, '5회 틀렸습니다. 1분 후 다시 시도하세요.');
-  passLockTimer = setTimeout(() => {
-    passLockTimer = null;
-    refreshJoinButton();
-    if (!joined && !joining) {
-      setStatus(false, '다시 접속할 수 있습니다');
-      writeGuide('[안내] 1분이 지났습니다. 비밀번호를 다시 입력해 접속하세요.');
+
+  const tick = () => {
+    const remain = ShareUtil.storedPassRemainMs(room);
+    if (remain <= 0) {
+      stopPassLockTimer();
+      refreshJoinButton();
+      if (!joined && !joining) {
+        setStatus(false, '다시 접속할 수 있습니다');
+        writeGuide('[안내] 대기 시간이 끝났습니다. 비밀번호를 다시 입력해 접속하세요.');
+      }
+      return;
     }
-  }, remain);
+    setStatus(false, passLockStatusText(remain));
+    refreshJoinButton();
+  };
+
+  tick();
+  passLockTimer = setInterval(tick, 1000);
 }
 
 function restoreGuestName() {
