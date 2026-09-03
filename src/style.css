@@ -116,6 +116,11 @@ body {
   font-size: 12px;
 }
 
+.toolbar input[type='text']:read-only,
+.toolbar input[type='password']:read-only {
+  cursor: default;
+}
+
 .share-pass-hint {
   font-size: 11px;
   color: var(--muted);

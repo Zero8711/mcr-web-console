@@ -685,10 +685,11 @@ function setButtonState(connected) {
     els.shareName.disabled = Boolean(shareClient);
   }
   if (els.sharePass) {
-    els.sharePass.disabled = Boolean(shareClient);
+    els.sharePass.readOnly = Boolean(shareClient);
+    els.sharePass.disabled = false;
   }
   if (els.sharePassShow) {
-    els.sharePassShow.disabled = Boolean(shareClient);
+    els.sharePassShow.disabled = false;
   }
   if (els.addConsole) {
     els.addConsole.disabled = panes.length >= MAX_PANES;
