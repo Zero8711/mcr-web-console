@@ -8,6 +8,9 @@ const room = ShareUtil.roomFromLocation();
 
 const els = {
   name: document.getElementById('txt-guest-name'),
+  pass: document.getElementById('txt-guest-pass'),
+  passShow: document.getElementById('chk-guest-pass-show'),
+  passHint: document.getElementById('guest-pass-hint'),
   join: document.getElementById('btn-join'),
   statusDot: document.getElementById('status-dot'),
   statusText: document.getElementById('status-text'),
@@ -33,6 +36,7 @@ const panes = [];
 let selectedPane = null;
 let shareClient = null;
 let joined = false;
+let joining = false;
 let canCmd = false;
 
 function currentPane() {
@@ -168,6 +172,8 @@ window.visualViewport?.addEventListener('resize', fitAllPanes);
 bindQuickCommands();
 applyGuestPerm(false);
 restoreGuestName();
+updateGuestPasswordHint();
+refreshJoinButton();
 
 if (!room) {
   els.warning.hidden = false;
@@ -177,7 +183,7 @@ if (!room) {
   writeGuide('[안내] join.html?room=... 형식의 링크로 접속하세요.');
 } else {
   setStatus(false, '이름을 입력하고 접속하세요');
-  writeGuide('[안내] 위쪽 이름칸에 본인 이름을 적은 뒤 [접속] 을 누르세요. 같은 링크로 여러 명이 들어올 수 있습니다.');
+  writeGuide('[안내] 이름과 시험팀에게 받은 비밀번호를 적은 뒤 [접속] 을 누르세요.');
   writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 시험팀이 허용하면 열립니다.');
 }
 
@@ -192,6 +198,32 @@ els.name.addEventListener('keydown', (event) => {
   event.preventDefault();
   connectShare();
 });
+
+if (els.pass) {
+  els.pass.addEventListener('input', () => {
+    updateGuestPasswordHint();
+    refreshJoinButton();
+  });
+  els.pass.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    event.preventDefault();
+    connectShare();
+  });
+}
+
+if (els.passShow && els.pass) {
+  els.passShow.addEventListener('change', () => {
+    els.pass.type = els.passShow.checked ? 'text' : 'password';
+  });
+}
+
+if (els.name) {
+  els.name.addEventListener('input', () => {
+    refreshJoinButton();
+  });
+}
 
 els.sendCommand.addEventListener('click', () => {
   sendConsoleCommand(els.customCommand.value);
@@ -243,8 +275,18 @@ function connectShare() {
     return;
   }
 
+  const password = readGuestPassword();
+  const passwordError = ShareUtil.validateSharePassword(password);
+  if (passwordError) {
+    setStatus(false, passwordError);
+    writeGuide('[안내] ' + passwordError);
+    els.pass?.focus();
+    return;
+  }
+
   saveGuestName(name);
   joined = false;
+  joining = true;
   canCmd = false;
   applyGuestPerm(false);
   els.join.disabled = true;
@@ -253,6 +295,7 @@ function connectShare() {
     role: 'guest',
     room,
     name,
+    password,
   });
 
   shareClient.onOpen = () => {
@@ -262,9 +305,10 @@ function connectShare() {
 
   shareClient.onReady = () => {
     joined = true;
+    joining = false;
     applyGuestPerm(shareClient.canCmd);
-    els.join.disabled = false;
     els.join.textContent = '다시 접속';
+    refreshJoinButton();
     els.name.value = shareClient.name;
     setStatus(true, shareClient.name + ' · 공유 접속됨');
     writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 콘솔 보기와 채팅은 바로 됩니다.', 'green');
@@ -330,20 +374,22 @@ function connectShare() {
 
   shareClient.onError = (message) => {
     joined = false;
+    joining = false;
     canCmd = false;
     applyGuestPerm(false);
-    els.join.disabled = false;
     els.join.textContent = '접속';
+    refreshJoinButton();
     setStatus(false, '접속 실패');
     writeGuide('[공유] ' + message, 'red');
   };
 
   shareClient.onClosed = (message) => {
     joined = false;
+    joining = false;
     canCmd = false;
     applyGuestPerm(false);
-    els.join.disabled = false;
     els.join.textContent = '접속';
+    refreshJoinButton();
     setStatus(false, '공유 종료');
     els.peers.textContent = '접속 0명';
     writeGuide('[공유] ' + message);
@@ -444,6 +490,45 @@ function setStatus(ok, text) {
 
 function readGuestName() {
   return String(els.name.value || '').replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
+function readGuestPassword() {
+  return String(els.pass?.value || '');
+}
+
+function refreshJoinButton() {
+  if (!els.join) {
+    return;
+  }
+  if (!room || joining) {
+    els.join.disabled = true;
+    return;
+  }
+  const nameOk = Boolean(readGuestName());
+  const passOk = ShareUtil.validateSharePassword(readGuestPassword()) === '';
+  els.join.disabled = !nameOk || !passOk;
+}
+
+function updateGuestPasswordHint() {
+  if (!els.passHint) {
+    return;
+  }
+  const typed = readGuestPassword();
+  if (!typed) {
+    els.passHint.textContent = ShareUtil.SHARE_PASSWORD_HINT;
+    els.passHint.classList.remove('ok', 'bad');
+    return;
+  }
+  const error = ShareUtil.validateSharePassword(typed);
+  if (error) {
+    els.passHint.textContent = error;
+    els.passHint.classList.add('bad');
+    els.passHint.classList.remove('ok');
+    return;
+  }
+  els.passHint.textContent = '비밀번호 형식이 맞습니다.';
+  els.passHint.classList.add('ok');
+  els.passHint.classList.remove('bad');
 }
 
 function restoreGuestName() {

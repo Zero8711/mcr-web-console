@@ -690,6 +690,7 @@ public class ShareRelay
         var role = Nz(msg.role);
         var roomId = Nz(msg.room);
         var name = SanitizeName(Nz(msg.name), role == "host" ? "시험팀" : "게스트");
+        var password = Nz(msg.password);
 
         if (type != "hello" || (role != "host" && role != "guest") || roomId.Length == 0)
         {
@@ -722,9 +723,14 @@ public class ShareRelay
                 {
                     error = "아직 공유가 시작되지 않았습니다. 시험팀이 먼저 공유를 켜 주세요.";
                 }
+                else if (!IsSharePasswordOk(password))
+                {
+                    error = SharePasswordRuleMessage();
+                }
                 else
                 {
                     room = new Room();
+                    room.Password = password;
                     Rooms[roomId] = room;
                 }
             }
@@ -737,8 +743,13 @@ public class ShareRelay
                     {
                         error = "이 방의 시험팀(host)이 이미 있습니다.";
                     }
+                    else if (!IsSharePasswordOk(password))
+                    {
+                        error = SharePasswordRuleMessage();
+                    }
                     else
                     {
+                        room.Password = password;
                         room.Host = client;
                     }
                 }
@@ -746,20 +757,21 @@ public class ShareRelay
                 {
                     error = "시험팀 연결이 없습니다. 공유가 꺼졌을 수 있습니다.";
                 }
+                else if (!PasswordMatches(room.Password, password))
+                {
+                    error = "비밀번호가 다릅니다.";
+                }
+                else if (room.Guests.Count >= 20)
+                {
+                    error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
+                }
                 else
                 {
-                    if (room.Guests.Count >= 20)
-                    {
-                        error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
-                    }
-                    else
-                    {
-                        client.Name = UniqueGuestName(room, name);
-                        room.Guests.Add(client);
-                        history = new List<string>(room.History);
-                        cmdHistory = new List<string>(room.CmdHistory);
-                        consolesText = room.ConsolesText;
-                    }
+                    client.Name = UniqueGuestName(room, name);
+                    room.Guests.Add(client);
+                    history = new List<string>(room.History);
+                    cmdHistory = new List<string>(room.CmdHistory);
+                    consolesText = room.ConsolesText;
                 }
             }
         }
@@ -831,6 +843,7 @@ public class ShareRelay
         var msg = WireMsg.Parse(string.IsNullOrEmpty(body) ? "{}" : body);
         var roomId = msg == null ? "" : Nz(msg.room);
         var name = SanitizeName(msg == null ? "" : Nz(msg.name), "게스트");
+        var password = msg == null ? "" : Nz(msg.password);
 
         if (roomId.Length == 0)
         {
@@ -864,20 +877,21 @@ public class ShareRelay
             {
                 error = "아직 공유가 시작되지 않았습니다. 시험팀이 먼저 공유를 켜 주세요.";
             }
+            else if (!PasswordMatches(room.Password, password))
+            {
+                error = "비밀번호가 다릅니다.";
+            }
+            else if (room.Guests.Count >= 20)
+            {
+                error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
+            }
             else
             {
-                if (room.Guests.Count >= 20)
-                {
-                    error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
-                }
-                else
-                {
-                    client.Name = UniqueGuestName(room, name);
-                    room.Guests.Add(client);
-                    history = new List<string>(room.History);
-                    cmdHistory = new List<string>(room.CmdHistory);
-                    consolesText = room.ConsolesText;
-                }
+                client.Name = UniqueGuestName(room, name);
+                room.Guests.Add(client);
+                history = new List<string>(room.History);
+                cmdHistory = new List<string>(room.CmdHistory);
+                consolesText = room.ConsolesText;
             }
         }
 
@@ -1166,6 +1180,59 @@ public class ShareRelay
             Console.WriteLine("[share] guest timeout " + guest.Name);
             RemoveClient(guest);
         }
+    }
+
+    private static string SharePasswordRuleMessage()
+    {
+        return "비밀번호는 영문 대문자, 소문자, 숫자, 특수문자를 섞어 8자 이상이어야 합니다.";
+    }
+
+    private static bool IsSharePasswordOk(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 8 || value.Length > 64)
+        {
+            return false;
+        }
+
+        var hasUpper = false;
+        var hasLower = false;
+        var hasDigit = false;
+        var hasSpecial = false;
+        for (var i = 0; i < value.Length; i++)
+        {
+            var ch = value[i];
+            if (char.IsWhiteSpace(ch) || ch < 32)
+            {
+                return false;
+            }
+            if (ch >= 'A' && ch <= 'Z')
+            {
+                hasUpper = true;
+            }
+            else if (ch >= 'a' && ch <= 'z')
+            {
+                hasLower = true;
+            }
+            else if (ch >= '0' && ch <= '9')
+            {
+                hasDigit = true;
+            }
+            else
+            {
+                hasSpecial = true;
+            }
+        }
+
+        return hasUpper && hasLower && hasDigit && hasSpecial;
+    }
+
+    private static bool PasswordMatches(string expected, string given)
+    {
+        if (string.IsNullOrEmpty(expected) || given == null)
+        {
+            return false;
+        }
+        return expected == given;
     }
 
     private static string SanitizeName(string value, string fallback)
@@ -1877,6 +1944,7 @@ public class ShareRelay
         public readonly List<string> History = new List<string>();
         public readonly List<string> CmdHistory = new List<string>();
         public string ConsolesText;
+        public string Password;
         public int HistoryBytes;
     }
 }
@@ -1895,6 +1963,9 @@ public class WireMsg
 
     [DataMember(EmitDefaultValue = false)]
     public string name;
+
+    [DataMember(EmitDefaultValue = false)]
+    public string password;
 
     [DataMember(EmitDefaultValue = false)]
     public string text;
@@ -1959,6 +2030,7 @@ public class WireMsg
         AppendField(sb, "role", role);
         AppendField(sb, "room", room);
         AppendField(sb, "name", name);
+        AppendField(sb, "password", password);
         AppendField(sb, "text", text);
         AppendField(sb, "from", from);
         AppendField(sb, "sid", sid);
@@ -2072,6 +2144,7 @@ public class WireMsg
             role = GetJsonString(json, "role"),
             room = GetJsonString(json, "room"),
             name = GetJsonString(json, "name"),
+            password = GetJsonString(json, "password"),
             text = GetJsonString(json, "text"),
             from = GetJsonString(json, "from"),
             sid = GetJsonString(json, "sid"),

@@ -29,6 +29,9 @@ const els = {
   shareStop: document.getElementById('btn-share-stop'),
   shareCopy: document.getElementById('btn-share-copy'),
   shareName: document.getElementById('txt-share-name'),
+  sharePass: document.getElementById('txt-share-pass'),
+  sharePassShow: document.getElementById('chk-share-pass-show'),
+  sharePassHint: document.getElementById('share-pass-hint'),
   shareWan: document.getElementById('txt-share-wan'),
   shareUrl: document.getElementById('txt-share-url'),
   sharePeers: document.getElementById('share-peers'),
@@ -73,6 +76,19 @@ if (els.shareWan) {
 
 if (els.shareName) {
   els.shareName.value = localStorage.getItem(SHARE_NAME_KEY) || '';
+}
+
+if (els.sharePass) {
+  els.sharePass.addEventListener('input', () => {
+    updateSharePasswordHint();
+    setButtonState(currentPane()?.isOpen);
+  });
+}
+
+if (els.sharePassShow && els.sharePass) {
+  els.sharePassShow.addEventListener('change', () => {
+    els.sharePass.type = els.sharePassShow.checked ? 'text' : 'password';
+  });
 }
 
 function currentPane() {
@@ -384,6 +400,7 @@ els.clear.addEventListener('click', () => {
 });
 
 bindQuickCommands();
+updateSharePasswordHint();
 
 els.shareStart.addEventListener('click', () => {
   startShare().catch((err) => {
@@ -661,12 +678,18 @@ function setButtonState(connected) {
   if (els.panelCmdSend) {
     els.panelCmdSend.disabled = !connected;
   }
-  const canShare = anyOpen() && !shareClient;
+  const canShare = anyOpen() && !shareClient && isSharePasswordReady();
   els.shareStart.disabled = !canShare;
   els.shareStop.disabled = !shareClient;
   els.shareCopy.disabled = !shareClient || !shareUrl;
   if (els.shareName) {
     els.shareName.disabled = Boolean(shareClient);
+  }
+  if (els.sharePass) {
+    els.sharePass.disabled = Boolean(shareClient);
+  }
+  if (els.sharePassShow) {
+    els.sharePassShow.disabled = Boolean(shareClient);
   }
   if (els.addConsole) {
     els.addConsole.disabled = panes.length >= MAX_PANES;
@@ -746,6 +769,14 @@ async function startShare() {
   }
   saveHostName(name);
 
+  const password = readSharePassword();
+  const passwordError = ShareUtil.validateSharePassword(password);
+  if (passwordError) {
+    currentPane()?.term.writeln('\x1b[33m[안내] ' + passwordError + '\x1b[0m');
+    els.sharePass?.focus();
+    return;
+  }
+
   const room = ShareUtil.makeRoomToken();
   let info = null;
   let shareUrls;
@@ -786,12 +817,13 @@ async function startShare() {
     role: 'host',
     room,
     name,
+    password,
   });
 
   shareClient.onReady = () => {
     const pane = currentPane();
     pane?.term.writeln('');
-    pane?.term.writeln('\x1b[32m[공유] 개발팀에 아래 링크를 보내세요. 이 탭을 닫으면 공유가 끊깁니다.\x1b[0m');
+    pane?.term.writeln('\x1b[32m[공유] 개발팀에 아래 링크와 비밀번호를 같이 보내세요. 이 탭을 닫으면 공유가 끊깁니다.\x1b[0m');
     for (const url of shareUrls) {
       pane?.term.writeln(`\x1b[32m       ${url}\x1b[0m`);
     }
@@ -1049,6 +1081,36 @@ function toSaveLocationError(err) {
 
 function readHostName() {
   return String(els.shareName?.value || '').replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
+function readSharePassword() {
+  return String(els.sharePass?.value || '');
+}
+
+function isSharePasswordReady() {
+  return ShareUtil.validateSharePassword(readSharePassword()) === '';
+}
+
+function updateSharePasswordHint() {
+  if (!els.sharePassHint) {
+    return;
+  }
+  const typed = readSharePassword();
+  if (!typed) {
+    els.sharePassHint.textContent = ShareUtil.SHARE_PASSWORD_HINT;
+    els.sharePassHint.classList.remove('ok', 'bad');
+    return;
+  }
+  const error = ShareUtil.validateSharePassword(typed);
+  if (error) {
+    els.sharePassHint.textContent = error;
+    els.sharePassHint.classList.add('bad');
+    els.sharePassHint.classList.remove('ok');
+    return;
+  }
+  els.sharePassHint.textContent = '비밀번호 조건을 만족합니다.';
+  els.sharePassHint.classList.add('ok');
+  els.sharePassHint.classList.remove('bad');
 }
 
 function renderShareGuests(info) {

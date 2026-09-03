@@ -11,6 +11,7 @@
       this.role = options.role;
       this.room = options.room;
       this.name = options.name || (options.role === 'host' ? '시험팀' : '개발팀');
+      this.sharePassword = String(options.password || '');
       this.socket = null;
       this.sid = '';
       this.transport = '';
@@ -87,12 +88,7 @@
       this.socket = socket;
 
       socket.addEventListener('open', () => {
-        this.send({
-          type: 'hello',
-          role: this.role,
-          room: this.room,
-          name: this.name,
-        });
+        this.send(this.helloPayload());
         this.onOpen?.();
         this.readyTimer = setTimeout(() => {
           if (this.connected || this.failed || this.intentionalClose) {
@@ -146,12 +142,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           cache: 'no-store',
-          body: JSON.stringify({
-            type: 'hello',
-            role: 'guest',
-            room: this.room,
-            name: this.name,
-          }),
+          body: JSON.stringify(this.helloPayload()),
         });
         const data = await res.json();
         if (this.intentionalClose) {
@@ -598,13 +589,7 @@
         if (this.intentionalClose) {
           return;
         }
-        this.sendRtc({
-          type: 'hello',
-          role: 'guest',
-          room: this.room,
-          name: this.name,
-        });
-        this.markReady();
+        this.sendRtc(this.helloPayload());
       });
 
       conn.on('data', (data) => {
@@ -638,28 +623,77 @@
         return;
       }
 
-      conn.on('open', () => {
-        if (this.intentionalClose) {
-          return;
+      let admitted = false;
+      const helloTimer = setTimeout(() => {
+        if (!admitted && !this.intentionalClose) {
+          this.rejectRtcConn(conn, '접속 시간이 초과되었습니다. 다시 접속하세요.');
         }
-        const name = String(conn.metadata?.name || '개발팀').slice(0, 20);
-        const id = makeGuestId();
-        this.rtcGuests.push({ conn, name, id, canCmd: false });
-        this.sendRtcTo(conn, { type: 'welcome', id });
-        if (this.lastConsoles) {
-          this.sendRtcTo(conn, { type: 'consoles', text: this.lastConsoles });
-        }
-        this.emitRtcPeers();
-      });
+      }, 12000);
 
       conn.on('data', (data) => {
+        if (!admitted) {
+          admitted = this.tryAdmitRtcGuest(conn, data, helloTimer);
+          return;
+        }
         this.handleRtcGuestData(conn, data);
       });
 
       conn.on('close', () => {
+        clearTimeout(helloTimer);
         this.rtcGuests = this.rtcGuests.filter((item) => item.conn !== conn);
         this.emitRtcPeers();
       });
+    }
+
+    tryAdmitRtcGuest(conn, data, helloTimer) {
+      let msg = data;
+      if (typeof data === 'string') {
+        try {
+          msg = JSON.parse(data);
+        } catch {
+          return false;
+        }
+      }
+      if (!msg || typeof msg !== 'object' || msg.type !== 'hello') {
+        return false;
+      }
+      if (!passwordsMatch(this.sharePassword, msg.password)) {
+        this.rejectRtcConn(conn, '비밀번호가 다릅니다.');
+        return false;
+      }
+
+      clearTimeout(helloTimer);
+      const name = String(msg.name || conn.metadata?.name || '개발팀')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 20) || '개발팀';
+      const id = makeGuestId();
+      this.rtcGuests.push({ conn, name, id, canCmd: false });
+      this.sendRtcTo(conn, { type: 'welcome', id });
+      if (this.lastConsoles) {
+        this.sendRtcTo(conn, { type: 'consoles', text: this.lastConsoles });
+      }
+      this.emitRtcPeers();
+      return true;
+    }
+
+    rejectRtcConn(conn, message) {
+      this.sendRtcTo(conn, { type: 'error', message: message || '접속이 거절되었습니다.' });
+      try {
+        conn.close();
+      } catch {
+        // ignore
+      }
+    }
+
+    helloPayload() {
+      return {
+        type: 'hello',
+        role: this.role,
+        room: this.room,
+        name: this.name,
+        password: this.sharePassword,
+      };
     }
 
     handleRtcGuestData(conn, data) {
@@ -798,6 +832,38 @@
     const bytes = new Uint8Array(8);
     crypto.getRandomValues(bytes);
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  const SHARE_PASSWORD_HINT = '영문 대문자, 소문자, 숫자, 특수문자를 섞어 8자 이상';
+
+  function validateSharePassword(value) {
+    const text = String(value || '');
+    if (text.length < 8) {
+      return '비밀번호는 8자 이상이어야 합니다.';
+    }
+    if (text.length > 64) {
+      return '비밀번호는 64자까지입니다.';
+    }
+    if (/\s/.test(text)) {
+      return '비밀번호에 공백은 넣을 수 없습니다.';
+    }
+    if (!/[A-Z]/.test(text)) {
+      return '영문 대문자가 들어가야 합니다.';
+    }
+    if (!/[a-z]/.test(text)) {
+      return '영문 소문자가 들어가야 합니다.';
+    }
+    if (!/[0-9]/.test(text)) {
+      return '숫자가 들어가야 합니다.';
+    }
+    if (!/[^A-Za-z0-9]/.test(text)) {
+      return '특수문자가 들어가야 합니다.';
+    }
+    return '';
+  }
+
+  function passwordsMatch(expected, given) {
+    return Boolean(expected) && given === expected;
   }
 
   function guestListFromPeers(info) {
@@ -974,6 +1040,9 @@
     encodeConsoles,
     decodeConsoles,
     guestListFromPeers,
+    validateSharePassword,
+    passwordsMatch,
+    SHARE_PASSWORD_HINT,
     peerSummary,
     isLocalRelayOrigin,
     joinUrlForRoom,
