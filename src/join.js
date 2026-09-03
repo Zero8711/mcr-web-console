@@ -37,6 +37,7 @@ let shareClient = null;
 let joined = false;
 let joining = false;
 let canCmd = false;
+let passLockTimer = null;
 
 function currentPane() {
   return selectedPane || panes[0] || null;
@@ -172,6 +173,7 @@ bindQuickCommands();
 applyGuestPerm(false);
 restoreGuestName();
 refreshJoinButton();
+schedulePassLockUnlock();
 
 if (!room) {
   els.warning.hidden = false;
@@ -280,6 +282,15 @@ function connectShare() {
     return;
   }
 
+  const lockMessage = ShareUtil.storedPassLockMessage(room);
+  if (lockMessage) {
+    setStatus(false, lockMessage);
+    writeGuide('[안내] ' + lockMessage);
+    schedulePassLockUnlock();
+    refreshJoinButton();
+    return;
+  }
+
   saveGuestName(name);
   joined = false;
   joining = true;
@@ -292,6 +303,7 @@ function connectShare() {
     room,
     name,
     password,
+    lockId: ShareUtil.getOrCreatePassGuard(room).id,
   });
 
   shareClient.onOpen = () => {
@@ -307,6 +319,7 @@ function connectShare() {
     refreshJoinButton();
     els.name.value = shareClient.name;
     setStatus(true, shareClient.name + ' · 공유 접속됨');
+    ShareUtil.clearStoredPassFails(room);
     writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 콘솔 보기와 채팅은 바로 됩니다.', 'green');
     if (!shareClient.canCmd) {
       writeGuide('[공유] 장비 명령은 시험팀이 허용하면 이 화면에 열립니다.');
@@ -374,8 +387,12 @@ function connectShare() {
     canCmd = false;
     applyGuestPerm(false);
     els.join.textContent = '접속';
+    if (isPassFailMessage(message)) {
+      ShareUtil.applyPassErrorLocal(room, message);
+      schedulePassLockUnlock();
+    }
     refreshJoinButton();
-    setStatus(false, '접속 실패');
+    setStatus(false, message || '접속 실패');
     writeGuide('[공유] ' + message, 'red');
   };
 
@@ -500,9 +517,41 @@ function refreshJoinButton() {
     els.join.disabled = true;
     return;
   }
+  if (ShareUtil.storedPassLockMessage(room)) {
+    els.join.disabled = true;
+    return;
+  }
   const nameOk = Boolean(readGuestName());
   const passOk = Boolean(readGuestPassword());
   els.join.disabled = !nameOk || !passOk;
+}
+
+function isPassFailMessage(message) {
+  const text = String(message || '');
+  return text.indexOf('비밀번호가 다릅니다') >= 0 || text.indexOf('1분 후') >= 0;
+}
+
+function schedulePassLockUnlock() {
+  if (passLockTimer) {
+    clearTimeout(passLockTimer);
+    passLockTimer = null;
+  }
+  if (!room) {
+    return;
+  }
+  const remain = ShareUtil.storedPassRemainMs(room);
+  if (remain <= 0) {
+    return;
+  }
+  setStatus(false, '5회 틀렸습니다. 1분 후 다시 시도하세요.');
+  passLockTimer = setTimeout(() => {
+    passLockTimer = null;
+    refreshJoinButton();
+    if (!joined && !joining) {
+      setStatus(false, '다시 접속할 수 있습니다');
+      writeGuide('[안내] 1분이 지났습니다. 비밀번호를 다시 입력해 접속하세요.');
+    }
+  }, remain);
 }
 
 function restoreGuestName() {

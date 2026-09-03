@@ -12,6 +12,8 @@
       this.room = options.room;
       this.name = options.name || (options.role === 'host' ? '시험팀' : '개발팀');
       this.sharePassword = String(options.password || '');
+      this.lockId = String(options.lockId || '');
+      this.passGuards = {};
       this.socket = null;
       this.sid = '';
       this.transport = '';
@@ -657,8 +659,15 @@
       if (!msg || typeof msg !== 'object' || msg.type !== 'hello') {
         return false;
       }
-      if (!passwordsMatch(this.sharePassword, msg.password)) {
-        this.rejectRtcConn(conn, '비밀번호가 다릅니다.');
+
+      const blocked = evaluateGuestPassword(
+        this.passGuards,
+        msg.lockId,
+        this.sharePassword,
+        msg.password
+      );
+      if (blocked) {
+        this.rejectRtcConn(conn, blocked);
         return false;
       }
 
@@ -687,13 +696,17 @@
     }
 
     helloPayload() {
-      return {
+      const payload = {
         type: 'hello',
         role: this.role,
         room: this.room,
         name: this.name,
         password: this.sharePassword,
       };
+      if (!this.isHost && this.lockId) {
+        payload.lockId = this.lockId;
+      }
+      return payload;
     }
 
     handleRtcGuestData(conn, data) {
@@ -861,6 +874,132 @@
 
   function passwordsMatch(expected, given) {
     return Boolean(expected) && given === expected;
+  }
+
+  const PASS_FAIL_LIMIT = 5;
+  const PASS_LOCK_MS = 60 * 1000;
+
+  function sanitizeLockId(value) {
+    const clean = String(value || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+    return clean || 'anon';
+  }
+
+  function evaluateGuestPassword(map, lockId, expected, given) {
+    const key = sanitizeLockId(lockId);
+    const now = Date.now();
+    let guard = map[key];
+    if (!guard) {
+      guard = { fails: 0, lockUntil: 0 };
+      map[key] = guard;
+    }
+    if (guard.lockUntil > now) {
+      return '5회 틀렸습니다. 1분 후 다시 시도하세요.';
+    }
+    if (guard.lockUntil && guard.lockUntil <= now) {
+      guard.fails = 0;
+      guard.lockUntil = 0;
+    }
+    if (passwordsMatch(expected, given)) {
+      delete map[key];
+      return '';
+    }
+    guard.fails += 1;
+    if (guard.fails >= PASS_FAIL_LIMIT) {
+      guard.fails = 0;
+      guard.lockUntil = now + PASS_LOCK_MS;
+      return '5회 틀렸습니다. 1분 후 다시 시도하세요.';
+    }
+    return '비밀번호가 다릅니다. (남은 횟수 ' + (PASS_FAIL_LIMIT - guard.fails) + ')';
+  }
+
+  function passGuardStorageKey(room) {
+    return 'share-pass-guard:' + String(room || '');
+  }
+
+  function getOrCreatePassGuard(room) {
+    let guard = null;
+    try {
+      const raw = localStorage.getItem(passGuardStorageKey(room));
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data && data.id) {
+          guard = {
+            id: sanitizeLockId(data.id) === 'anon' ? '' : sanitizeLockId(data.id),
+            fails: Number(data.fails) || 0,
+            lockUntil: Number(data.lockUntil) || 0,
+          };
+        }
+      }
+    } catch {
+      guard = null;
+    }
+    if (!guard || !guard.id) {
+      guard = {
+        id: makeGuestId() + makeGuestId(),
+        fails: 0,
+        lockUntil: 0,
+      };
+    }
+    if (guard.lockUntil && guard.lockUntil <= Date.now()) {
+      guard.fails = 0;
+      guard.lockUntil = 0;
+    }
+    savePassGuard(room, guard);
+    return guard;
+  }
+
+  function savePassGuard(room, guard) {
+    try {
+      localStorage.setItem(passGuardStorageKey(room), JSON.stringify(guard));
+    } catch {
+      // 저장 실패해도 이번 탭의 접속은 진행한다
+    }
+  }
+
+  function storedPassLockMessage(room) {
+    const guard = getOrCreatePassGuard(room);
+    if (guard.lockUntil > Date.now()) {
+      return '5회 틀렸습니다. 1분 후 다시 시도하세요.';
+    }
+    return '';
+  }
+
+  function storedPassRemainMs(room) {
+    const guard = getOrCreatePassGuard(room);
+    return Math.max(0, guard.lockUntil - Date.now());
+  }
+
+  function applyPassErrorLocal(room, message) {
+    const text = String(message || '');
+    const guard = getOrCreatePassGuard(room);
+    if (text.indexOf('1분') >= 0) {
+      guard.fails = 0;
+      guard.lockUntil = Date.now() + PASS_LOCK_MS;
+      savePassGuard(room, guard);
+      return;
+    }
+    const match = text.match(/남은 횟수\s*(\d+)/);
+    if (match) {
+      guard.fails = Math.max(0, PASS_FAIL_LIMIT - Number(match[1]));
+      guard.lockUntil = 0;
+      savePassGuard(room, guard);
+      return;
+    }
+    if (text.indexOf('비밀번호가 다릅니다') >= 0) {
+      guard.fails += 1;
+      if (guard.fails >= PASS_FAIL_LIMIT) {
+        guard.fails = 0;
+        guard.lockUntil = Date.now() + PASS_LOCK_MS;
+      }
+      savePassGuard(room, guard);
+    }
+  }
+
+  function clearStoredPassFails(room) {
+    const guard = getOrCreatePassGuard(room);
+    guard.fails = 0;
+    guard.lockUntil = 0;
+    savePassGuard(room, guard);
   }
 
   function guestListFromPeers(info) {
@@ -1039,6 +1178,11 @@
     guestListFromPeers,
     validateSharePassword,
     passwordsMatch,
+    getOrCreatePassGuard,
+    storedPassLockMessage,
+    storedPassRemainMs,
+    applyPassErrorLocal,
+    clearStoredPassFails,
     SHARE_PASSWORD_HINT,
     peerSummary,
     isLocalRelayOrigin,

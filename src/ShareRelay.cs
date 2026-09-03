@@ -691,6 +691,7 @@ public class ShareRelay
         var roomId = Nz(msg.room);
         var name = SanitizeName(Nz(msg.name), role == "host" ? "시험팀" : "게스트");
         var password = Nz(msg.password);
+        var lockId = Nz(msg.lockId);
 
         if (type != "hello" || (role != "host" && role != "guest") || roomId.Length == 0)
         {
@@ -757,21 +758,21 @@ public class ShareRelay
                 {
                     error = "시험팀 연결이 없습니다. 공유가 꺼졌을 수 있습니다.";
                 }
-                else if (!PasswordMatches(room.Password, password))
-                {
-                    error = "비밀번호가 다릅니다.";
-                }
-                else if (room.Guests.Count >= 20)
-                {
-                    error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
-                }
                 else
                 {
-                    client.Name = UniqueGuestName(room, name);
-                    room.Guests.Add(client);
-                    history = new List<string>(room.History);
-                    cmdHistory = new List<string>(room.CmdHistory);
-                    consolesText = room.ConsolesText;
+                    error = CheckGuestPassword(room, lockId, password);
+                    if (error == null && room.Guests.Count >= 20)
+                    {
+                        error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
+                    }
+                    else if (error == null)
+                    {
+                        client.Name = UniqueGuestName(room, name);
+                        room.Guests.Add(client);
+                        history = new List<string>(room.History);
+                        cmdHistory = new List<string>(room.CmdHistory);
+                        consolesText = room.ConsolesText;
+                    }
                 }
             }
         }
@@ -844,6 +845,7 @@ public class ShareRelay
         var roomId = msg == null ? "" : Nz(msg.room);
         var name = SanitizeName(msg == null ? "" : Nz(msg.name), "게스트");
         var password = msg == null ? "" : Nz(msg.password);
+        var lockId = msg == null ? "" : Nz(msg.lockId);
 
         if (roomId.Length == 0)
         {
@@ -877,21 +879,21 @@ public class ShareRelay
             {
                 error = "아직 공유가 시작되지 않았습니다. 시험팀이 먼저 공유를 켜 주세요.";
             }
-            else if (!PasswordMatches(room.Password, password))
-            {
-                error = "비밀번호가 다릅니다.";
-            }
-            else if (room.Guests.Count >= 20)
-            {
-                error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
-            }
             else
             {
-                client.Name = UniqueGuestName(room, name);
-                room.Guests.Add(client);
-                history = new List<string>(room.History);
-                cmdHistory = new List<string>(room.CmdHistory);
-                consolesText = room.ConsolesText;
+                error = CheckGuestPassword(room, lockId, password);
+                if (error == null && room.Guests.Count >= 20)
+                {
+                    error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
+                }
+                else if (error == null)
+                {
+                    client.Name = UniqueGuestName(room, name);
+                    room.Guests.Add(client);
+                    history = new List<string>(room.History);
+                    cmdHistory = new List<string>(room.CmdHistory);
+                    consolesText = room.ConsolesText;
+                }
             }
         }
 
@@ -1228,6 +1230,85 @@ public class ShareRelay
             return false;
         }
         return expected == given;
+    }
+
+    private static string SanitizeLockId(string value)
+    {
+        var raw = Nz(value);
+        var sb = new StringBuilder();
+        for (var i = 0; i < raw.Length && sb.Length < 32; i++)
+        {
+            var ch = raw[i];
+            var ok = (ch >= '0' && ch <= '9') ||
+                (ch >= 'A' && ch <= 'Z') ||
+                (ch >= 'a' && ch <= 'z');
+            if (ok)
+            {
+                sb.Append(ch);
+            }
+        }
+        return sb.Length == 0 ? "anon" : sb.ToString();
+    }
+
+    private static string CheckGuestPassword(Room room, string lockId, string password)
+    {
+        PrunePassGuards(room);
+        var key = SanitizeLockId(lockId);
+        PassGuard guard;
+        if (!room.PassGuards.TryGetValue(key, out guard))
+        {
+            guard = new PassGuard();
+            room.PassGuards[key] = guard;
+        }
+
+        var now = DateTime.UtcNow;
+        if (guard.LockUntil > now)
+        {
+            return "5회 틀렸습니다. 1분 후 다시 시도하세요.";
+        }
+        if (guard.LockUntil != DateTime.MinValue && guard.LockUntil <= now)
+        {
+            guard.Fails = 0;
+            guard.LockUntil = DateTime.MinValue;
+        }
+        if (PasswordMatches(room.Password, password))
+        {
+            room.PassGuards.Remove(key);
+            return null;
+        }
+
+        guard.Fails++;
+        if (guard.Fails >= 5)
+        {
+            guard.Fails = 0;
+            guard.LockUntil = now.AddMinutes(1);
+            return "5회 틀렸습니다. 1분 후 다시 시도하세요.";
+        }
+
+        return "비밀번호가 다릅니다. (남은 횟수 " + (5 - guard.Fails) + ")";
+    }
+
+    private static void PrunePassGuards(Room room)
+    {
+        if (room.PassGuards.Count < 200)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var drop = new List<string>();
+        foreach (var pair in room.PassGuards)
+        {
+            var staleLock = pair.Value.LockUntil != DateTime.MinValue && pair.Value.LockUntil < now;
+            if (staleLock && pair.Value.Fails == 0)
+            {
+                drop.Add(pair.Key);
+            }
+        }
+        for (var i = 0; i < drop.Count; i++)
+        {
+            room.PassGuards.Remove(drop[i]);
+        }
     }
 
     private static string SanitizeName(string value, string fallback)
@@ -1940,7 +2021,14 @@ public class ShareRelay
         public readonly List<string> CmdHistory = new List<string>();
         public string ConsolesText;
         public string Password;
+        public readonly Dictionary<string, PassGuard> PassGuards = new Dictionary<string, PassGuard>();
         public int HistoryBytes;
+    }
+
+    private class PassGuard
+    {
+        public int Fails;
+        public DateTime LockUntil;
     }
 }
 
@@ -1961,6 +2049,9 @@ public class WireMsg
 
     [DataMember(EmitDefaultValue = false)]
     public string password;
+
+    [DataMember(EmitDefaultValue = false)]
+    public string lockId;
 
     [DataMember(EmitDefaultValue = false)]
     public string text;
@@ -2026,6 +2117,7 @@ public class WireMsg
         AppendField(sb, "room", room);
         AppendField(sb, "name", name);
         AppendField(sb, "password", password);
+        AppendField(sb, "lockId", lockId);
         AppendField(sb, "text", text);
         AppendField(sb, "from", from);
         AppendField(sb, "sid", sid);
@@ -2140,6 +2232,7 @@ public class WireMsg
             room = GetJsonString(json, "room"),
             name = GetJsonString(json, "name"),
             password = GetJsonString(json, "password"),
+            lockId = GetJsonString(json, "lockId"),
             text = GetJsonString(json, "text"),
             from = GetJsonString(json, "from"),
             sid = GetJsonString(json, "sid"),
