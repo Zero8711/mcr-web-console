@@ -10,7 +10,6 @@ const els = {
   name: document.getElementById('txt-guest-name'),
   pass: document.getElementById('txt-guest-pass'),
   passShow: document.getElementById('chk-guest-pass-show'),
-  passHint: document.getElementById('guest-pass-hint'),
   join: document.getElementById('btn-join'),
   statusDot: document.getElementById('status-dot'),
   statusText: document.getElementById('status-text'),
@@ -172,7 +171,6 @@ window.visualViewport?.addEventListener('resize', fitAllPanes);
 bindQuickCommands();
 applyGuestPerm(false);
 restoreGuestName();
-updateGuestPasswordHint();
 refreshJoinButton();
 
 if (!room) {
@@ -201,7 +199,6 @@ els.name.addEventListener('keydown', (event) => {
 
 if (els.pass) {
   els.pass.addEventListener('input', () => {
-    updateGuestPasswordHint();
     refreshJoinButton();
   });
   els.pass.addEventListener('keydown', (event) => {
@@ -276,10 +273,9 @@ function connectShare() {
   }
 
   const password = readGuestPassword();
-  const passwordError = ShareUtil.validateSharePassword(password);
-  if (passwordError) {
-    setStatus(false, passwordError);
-    writeGuide('[안내] ' + passwordError);
+  if (!password) {
+    setStatus(false, '비밀번호를 입력하세요');
+    writeGuide('[안내] 시험팀에게 받은 비밀번호를 입력하세요.');
     els.pass?.focus();
     return;
   }
@@ -505,30 +501,8 @@ function refreshJoinButton() {
     return;
   }
   const nameOk = Boolean(readGuestName());
-  const passOk = ShareUtil.validateSharePassword(readGuestPassword()) === '';
+  const passOk = Boolean(readGuestPassword());
   els.join.disabled = !nameOk || !passOk;
-}
-
-function updateGuestPasswordHint() {
-  if (!els.passHint) {
-    return;
-  }
-  const typed = readGuestPassword();
-  if (!typed) {
-    els.passHint.textContent = ShareUtil.SHARE_PASSWORD_HINT;
-    els.passHint.classList.remove('ok', 'bad');
-    return;
-  }
-  const error = ShareUtil.validateSharePassword(typed);
-  if (error) {
-    els.passHint.textContent = error;
-    els.passHint.classList.add('bad');
-    els.passHint.classList.remove('ok');
-    return;
-  }
-  els.passHint.textContent = '비밀번호 형식이 맞습니다.';
-  els.passHint.classList.add('ok');
-  els.passHint.classList.remove('bad');
 }
 
 function restoreGuestName() {
