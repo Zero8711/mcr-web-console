@@ -370,6 +370,9 @@
         );
         this.hooks.onAgingTriggered?.(this, keyword, fileName, triggerLine, timeText);
       };
+      this.agingLog.onHitsChange = (list) => {
+        this.hooks.onAgingHits?.(this, list);
+      };
       this.agingLog.onFinished = (fileName, reason, afterCount) => {
         this.term.writeln('');
         if (reason === 'user-stop') {

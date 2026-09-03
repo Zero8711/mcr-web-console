@@ -20,6 +20,8 @@ const els = {
   logStop: document.getElementById('btn-log-stop'),
   logKeywords: document.getElementById('txt-log-keywords'),
   agingTarget: document.getElementById('aging-target'),
+  agingHitList: document.getElementById('aging-hit-list'),
+  agingHitClear: document.getElementById('btn-aging-hit-clear'),
   logStatusDot: document.getElementById('log-status-dot'),
   logStatusText: document.getElementById('log-status-text'),
   quickCommands: document.getElementById('quick-commands'),
@@ -145,6 +147,11 @@ function paneHooks() {
     onAgingTriggered: (pane, keyword, fileName, triggerLine, timeText) => {
       showAbnormalAlert(pane, keyword, fileName, triggerLine, timeText);
     },
+    onAgingHits: (pane, list) => {
+      if (pane === currentPane()) {
+        renderAgingHits(list);
+      }
+    },
   };
 }
 
@@ -235,6 +242,7 @@ function syncAgingToolbar(pane) {
   }
   els.logWatch.checked = target.agingLog.enabled;
   applyAgingState(target.agingLog.getState());
+  renderAgingHits(target.agingLog.getHitList());
 }
 
 function applyAgingState(state) {
@@ -243,6 +251,54 @@ function applyAgingState(state) {
   els.logStatusDot.classList.toggle('recording', state.kind === 'recording');
   els.logStatusDot.classList.toggle('connected', state.kind === 'recording');
   els.logStop.disabled = state.kind !== 'recording';
+}
+
+function renderAgingHits(list) {
+  const box = els.agingHitList;
+  if (!box) {
+    return;
+  }
+
+  box.replaceChildren();
+  const rows = Array.isArray(list) ? list : [];
+
+  if (!rows.length) {
+    const empty = document.createElement('span');
+    empty.className = 'aging-hit-empty';
+    empty.textContent = '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.';
+    box.appendChild(empty);
+    if (els.agingHitClear) {
+      els.agingHitClear.disabled = true;
+    }
+    return;
+  }
+
+  let anyHit = false;
+  for (const item of rows) {
+    const count = Number(item.count) || 0;
+    if (count > 0) {
+      anyHit = true;
+    }
+
+    const chip = document.createElement('span');
+    chip.className = 'aging-hit-item' + (count > 0 ? ' has-hit' : '');
+
+    const name = document.createElement('strong');
+    name.textContent = item.keyword;
+
+    const last = count > 0 && item.lastTime ? item.lastTime : '-';
+    const meta = document.createElement('span');
+    meta.textContent = count + '회 · 마지막 ' + last;
+
+    chip.title = item.keyword + '  ' + count + '회  마지막 ' + last;
+    chip.appendChild(name);
+    chip.appendChild(meta);
+    box.appendChild(chip);
+  }
+
+  if (els.agingHitClear) {
+    els.agingHitClear.disabled = !anyHit;
+  }
 }
 
 function refreshShareButtons() {
@@ -325,6 +381,12 @@ els.logWatch.addEventListener('change', () => {
 els.logStop.addEventListener('click', () => {
   currentPane()?.agingLog.stopCaptureByUser();
 });
+
+if (els.agingHitClear) {
+  els.agingHitClear.addEventListener('click', () => {
+    currentPane()?.agingLog?.clearHits();
+  });
+}
 
 if (els.logKeywords) {
   const applySelectedKeywords = () => {

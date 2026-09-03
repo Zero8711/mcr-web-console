@@ -2,6 +2,7 @@
  * 에이징 이상로그 감시.
  * 키워드가 나오면 발생 시각과 해당 줄을 앞에 두고,
  * 위 200줄·아래 200줄만 파일로 저장한다.
+ * 칸마다 키워드별 발견 횟수와 마지막 시각을 따로 남긴다.
  */
 (function (global) {
   const DEFAULT_KEYWORDS =
@@ -9,6 +10,7 @@
   const BEFORE_LINE_LIMIT = 200;
   const AFTER_LINE_LIMIT = 200;
   const KEYWORD_STORAGE_KEY = 'aging-log-keywords';
+  const HIT_STORAGE_KEY = 'aging-log-hits';
   const FLUSH_INTERVAL_MS = 2000;
 
   class AgingLogWatcher {
@@ -28,11 +30,14 @@
       this.finishing = false;
       this.keywordText = loadSavedKeywords(this.paneId);
       this.keywords = parseKeywords(this.keywordText);
+      this.hits = loadSavedHits(this.paneId);
+      this.syncHitLabels();
       this.writeChain = Promise.resolve();
       this.flushTimer = null;
 
       this.onStateChange = null;
       this.onTriggered = null;
+      this.onHitsChange = null;
       this.onFinished = null;
       this.onError = null;
     }
@@ -65,6 +70,28 @@
       } catch {
         // 저장 공간이 없어도 감시는 계속
       }
+      this.syncHitLabels();
+      this.onHitsChange?.(this.getHitList());
+    }
+
+    getHitList() {
+      return this.keywords.map((key) => {
+        const item = this.hits[key.toLowerCase()];
+        return {
+          keyword: key,
+          count: item ? Number(item.count) || 0 : 0,
+          lastTime: item ? String(item.lastTime || '') : '',
+        };
+      });
+    }
+
+    clearHits() {
+      for (const item of Object.values(this.hits)) {
+        item.count = 0;
+        item.lastTime = '';
+      }
+      this.saveHits();
+      this.onHitsChange?.(this.getHitList());
     }
 
     setEnabled(enabled) {
@@ -232,6 +259,10 @@
 
     handleCompleteLine(line) {
       this.pushRecent(line);
+
+      if (this.enabled) {
+        this.noteHits(line);
+      }
 
       if (this.finishing) {
         return;
@@ -445,6 +476,60 @@
       }
     }
 
+    noteHits(line) {
+      const lower = String(line || '').toLowerCase();
+      if (!lower) {
+        return;
+      }
+
+      const now = formatNow();
+      let changed = false;
+
+      for (const key of this.keywords) {
+        if (!lower.includes(key.toLowerCase())) {
+          continue;
+        }
+        const id = key.toLowerCase();
+        if (!this.hits[id]) {
+          this.hits[id] = { label: key, count: 0, lastTime: '' };
+        }
+        this.hits[id].label = key;
+        this.hits[id].count += 1;
+        this.hits[id].lastTime = now;
+        changed = true;
+      }
+
+      if (!changed) {
+        return;
+      }
+
+      this.saveHits();
+      this.onHitsChange?.(this.getHitList());
+    }
+
+    syncHitLabels() {
+      const next = {};
+      for (const key of this.keywords) {
+        const id = key.toLowerCase();
+        const prev = this.hits[id];
+        next[id] = {
+          label: key,
+          count: prev ? Number(prev.count) || 0 : 0,
+          lastTime: prev ? String(prev.lastTime || '') : '',
+        };
+      }
+      this.hits = next;
+      this.saveHits();
+    }
+
+    saveHits() {
+      try {
+        localStorage.setItem(hitStorageKey(this.paneId), JSON.stringify(this.hits));
+      } catch {
+        // 저장 공간이 없어도 이번 탭의 횟수는 유지한다
+      }
+    }
+
     notify() {
       this.onStateChange?.(this.getState());
     }
@@ -452,6 +537,34 @@
 
   function keywordStorageKey(paneId) {
     return KEYWORD_STORAGE_KEY + ':' + String(paneId || '1');
+  }
+
+  function hitStorageKey(paneId) {
+    return HIT_STORAGE_KEY + ':' + String(paneId || '1');
+  }
+
+  function loadSavedHits(paneId) {
+    try {
+      const raw = localStorage.getItem(hitStorageKey(paneId));
+      if (!raw) {
+        return {};
+      }
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') {
+        return {};
+      }
+      const hits = {};
+      for (const [id, item] of Object.entries(data)) {
+        hits[String(id).toLowerCase()] = {
+          label: item && item.label ? String(item.label) : id,
+          count: item ? Number(item.count) || 0 : 0,
+          lastTime: item ? String(item.lastTime || '') : '',
+        };
+      }
+      return hits;
+    } catch {
+      return {};
+    }
   }
 
   function loadSavedKeywords(paneId) {

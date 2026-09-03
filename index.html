@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20260903g" />
+    <link rel="stylesheet" href="./src/style.css?v=20260904a" />
   </head>
   <body>
     <div id="app">
@@ -109,6 +109,12 @@
           <span id="log-status-text">저장 위치 없음</span>
         </div>
       </header>
+
+      <div id="aging-hit-bar" class="toolbar aging-hit-bar">
+        <div class="aging-hit-heading">이상로그 발생</div>
+        <div id="aging-hit-list" class="aging-hit-list"></div>
+        <button id="btn-aging-hit-clear" type="button" class="btn" disabled>횟수 지우기</button>
+      </div>
 
       <header class="toolbar toolbar-commands">
         <div id="quick-commands" class="toolbar-group command-buttons"></div>
@@ -244,14 +250,14 @@
     <script src="./vendor/xterm.js"></script>
     <script src="./vendor/addon-fit.js"></script>
     <script src="./src/serial.js"></script>
-    <script src="./src/aging-log.js?v=20260901i"></script>
+    <script src="./src/aging-log.js?v=20260904a"></script>
     <script src="./src/commands.js"></script>
     <script src="./src/log-view.js?v=20260901k"></script>
     <script src="./vendor/peerjs.min.js"></script>
     <script src="./src/share.js?v=20260903e"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
-    <script src="./src/console-pane.js?v=20260902g"></script>
-    <script src="./src/main.js?v=20260903g"></script>
+    <script src="./src/console-pane.js?v=20260904a"></script>
+    <script src="./src/main.js?v=20260904a"></script>
   </body>
 </html>
