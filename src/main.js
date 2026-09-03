@@ -37,7 +37,6 @@ const els = {
   sharePeers: document.getElementById('share-peers'),
   shareGuestBar: document.getElementById('share-guest-bar'),
   shareGuestList: document.getElementById('share-guest-list'),
-  shareWarning: document.getElementById('share-warning'),
   pagesHint: document.getElementById('pages-hint'),
   chatPanel: document.getElementById('chat-panel'),
   chatLog: document.getElementById('chat-log'),
@@ -803,7 +802,6 @@ async function startShare() {
 
   shareUrl = shareUrls[0];
   els.shareUrl.value = shareUrl;
-  els.shareWarning.hidden = false;
   if (els.shareGuestBar) {
     els.shareGuestBar.hidden = false;
   }
@@ -913,7 +911,6 @@ function stopShare(message) {
   client?.disconnect();
 
   els.shareUrl.value = '';
-  els.shareWarning.hidden = true;
   if (els.shareGuestBar) {
     els.shareGuestBar.hidden = true;
   }
