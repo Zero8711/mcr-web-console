@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔 · 원격</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20260902e" />
+    <link rel="stylesheet" href="./src/style.css?v=20260902g" />
   </head>
   <body>
-    <div id="app" class="guest-app">
+    <div id="app" class="guest-app guest-readonly">
       <header class="toolbar">
         <div class="toolbar-group">
           <label>
@@ -31,6 +31,7 @@
           <span id="status-dot" class="status-dot" aria-hidden="true"></span>
           <span id="status-text">접속 중…</span>
           <span id="share-peers">접속 0명</span>
+          <span id="guest-perm" class="guest-perm">채팅만</span>
         </div>
       </header>
 
@@ -54,8 +55,7 @@
       <p id="browser-warning" class="browser-warning" hidden></p>
       <p class="share-banner">
         같은 링크로 여러 명이 들어올 수 있습니다. 이름을 적은 뒤 [접속] 을 누르세요.
-        장비가 여러 대면 콘솔 칸이 같이 생깁니다. 명령을 넣을 칸을 클릭한 뒤 보내세요.
-        대화와 명령 기록은 콘솔 아래에 있습니다.
+        처음에는 콘솔 보기와 채팅만 됩니다. 장비 명령은 시험팀이 허용하면 열립니다.
       </p>
 
       <div class="workspace">
@@ -74,7 +74,7 @@
           </form>
         </aside>
         <aside id="cmd-panel" class="chat-panel cmd-panel">
-          <div class="chat-header">명령 기록</div>
+          <div class="chat-header" id="cmd-header">명령 기록</div>
           <div id="cmd-log" class="chat-log"></div>
           <form id="cmd-form" class="chat-form">
             <input
@@ -95,10 +95,10 @@
     <script src="./src/commands.js"></script>
     <script src="./src/log-view.js?v=20260901k"></script>
     <script src="./vendor/peerjs.min.js"></script>
-    <script src="./src/share.js?v=20260902f"></script>
+    <script src="./src/share.js?v=20260902g"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
-    <script src="./src/console-pane.js?v=20260901r"></script>
-    <script src="./src/join.js?v=20260902e"></script>
+    <script src="./src/console-pane.js?v=20260902g"></script>
+    <script src="./src/join.js?v=20260902g"></script>
   </body>
 </html>

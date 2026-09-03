@@ -29,6 +29,9 @@
       this.onClosed = null;
       this.onReady = null;
       this.onOpen = null;
+      this.onPerm = null;
+      this.canCmd = false;
+      this.lastGuests = [];
     }
 
     get isHost() {
@@ -61,6 +64,8 @@
       this.rtcGuests = [];
       this.rtcHostConn = null;
       this.lastConsoles = '';
+      this.canCmd = false;
+      this.lastGuests = [];
 
       if (!isLocalRelayOrigin()) {
         this.connectWebRtc();
@@ -259,11 +264,22 @@
         this.onError?.(msg.message || '중계 오류');
         return;
       }
-      if (type === 'welcome' || type === 'peers') {
-        this.markReady();
-        if (type === 'peers') {
-          this.onPeers?.(msg);
+      if (type === 'welcome') {
+        if (msg.id && !this.isHost) {
+          this.sid = msg.id;
         }
+        this.markReady();
+        return;
+      }
+      if (type === 'peers') {
+        this.markReady();
+        this.lastGuests = guestListFromPeers(msg);
+        this.applyMyPerm(msg);
+        this.onPeers?.(msg);
+        return;
+      }
+      if (type === 'perm') {
+        this.setCanCmd(msg.text === '1');
         return;
       }
       if (type === 'log') {
@@ -327,14 +343,14 @@
     }
 
     sendCmd(text, slot) {
-      if (!text) {
+      if (!text || !this.maySendCommand()) {
         return;
       }
       this.send({ type: 'cmd', text, slot: slot || '1' });
     }
 
     sendKeys(text, slot) {
-      if (!text) {
+      if (!text || !this.maySendCommand()) {
         return;
       }
       this.send({ type: 'keys', text, slot: slot || '1' });
@@ -352,7 +368,64 @@
       if (!text) {
         return;
       }
+      if (!this.isHost && !this.maySendCommand()) {
+        return;
+      }
       this.send({ type: 'cmdlog', text, slot: slot || '1' });
+    }
+
+    sendAllowCmd(guestId, allow) {
+      if (!this.isHost || !guestId) {
+        return;
+      }
+      const on = Boolean(allow);
+      const item = this.lastGuests.find((guest) => guest.id === guestId);
+      if (item) {
+        item.canCmd = on;
+      }
+      if (this.transport === 'webrtc') {
+        this.setRtcGuestAllow(guestId, on);
+        return;
+      }
+      this.send({ type: 'allowcmd', id: guestId, text: on ? '1' : '0' });
+    }
+
+    maySendCommand() {
+      return this.isHost || this.canCmd;
+    }
+
+    guestMayCmd(name) {
+      const item = this.lastGuests.find((guest) => guest.name === name);
+      return Boolean(item && item.canCmd);
+    }
+
+    applyMyPerm(msg) {
+      if (this.isHost) {
+        return;
+      }
+      const ids = Array.isArray(msg.guestIds) ? msg.guestIds : [];
+      const flags = Array.isArray(msg.guestCanCmd) ? msg.guestCanCmd : [];
+      const index = ids.indexOf(this.sid);
+      this.setCanCmd(index >= 0 && String(flags[index]) === '1');
+    }
+
+    setCanCmd(allowed) {
+      const next = Boolean(allowed);
+      const changed = next !== this.canCmd;
+      this.canCmd = next;
+      if (changed || this.onPerm) {
+        this.onPerm?.(this.canCmd);
+      }
+    }
+
+    setRtcGuestAllow(guestId, allow) {
+      const guest = this.rtcGuests.find((item) => item.id === guestId);
+      if (!guest) {
+        return;
+      }
+      guest.canCmd = Boolean(allow);
+      this.sendRtcTo(guest.conn, { type: 'perm', text: guest.canCmd ? '1' : '0' });
+      this.emitRtcPeers();
     }
 
     sendConsoles(text) {
@@ -570,8 +643,9 @@
           return;
         }
         const name = String(conn.metadata?.name || '개발팀').slice(0, 20);
-        this.rtcGuests.push({ conn, name });
-        this.sendRtcTo(conn, { type: 'welcome' });
+        const id = makeGuestId();
+        this.rtcGuests.push({ conn, name, id, canCmd: false });
+        this.sendRtcTo(conn, { type: 'welcome', id });
         if (this.lastConsoles) {
           this.sendRtcTo(conn, { type: 'consoles', text: this.lastConsoles });
         }
@@ -614,6 +688,12 @@
       if (guest) {
         msg = Object.assign({}, msg, { from: guest.name });
       }
+      if ((msg.type === 'cmd' || msg.type === 'keys' || msg.type === 'cmdlog') && guest && !guest.canCmd) {
+        return;
+      }
+      if (msg.type === 'allowcmd' || msg.type === 'perm' || msg.type === 'log' || msg.type === 'consoles') {
+        return;
+      }
       this.dispatchMessage(msg);
       if (msg.type === 'chat' || msg.type === 'cmdlog' || msg.type === 'rename') {
         this.sendRtc(msg);
@@ -651,9 +731,18 @@
 
     emitRtcPeers() {
       const guests = this.rtcGuests.map((item) => item.name);
-      const info = { guests, guestCount: guests.length };
+      const guestIds = this.rtcGuests.map((item) => item.id);
+      const guestCanCmd = this.rtcGuests.map((item) => (item.canCmd ? '1' : '0'));
+      const info = { guests, guestIds, guestCanCmd, guestCount: guests.length };
+      this.lastGuests = guestListFromPeers(info);
       this.onPeers?.(info);
-      this.sendRtc({ type: 'peers', guests, guestCount: guests.length });
+      this.sendRtc({
+        type: 'peers',
+        guests,
+        guestIds,
+        guestCanCmd,
+        guestCount: guests.length,
+      });
     }
   }
 
@@ -703,6 +792,27 @@
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function makeGuestId() {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function guestListFromPeers(info) {
+    const names = Array.isArray(info?.guests) ? info.guests : [];
+    const ids = Array.isArray(info?.guestIds) ? info.guestIds : [];
+    const flags = Array.isArray(info?.guestCanCmd) ? info.guestCanCmd : [];
+    const list = [];
+    for (let i = 0; i < names.length; i += 1) {
+      list.push({
+        id: ids[i] || '',
+        name: names[i],
+        canCmd: String(flags[i]) === '1',
+      });
+    }
+    return list;
   }
 
   function roomFromLocation() {
@@ -863,6 +973,7 @@
     TypedLineBuffer,
     encodeConsoles,
     decodeConsoles,
+    guestListFromPeers,
     peerSummary,
     isLocalRelayOrigin,
     joinUrlForRoom,

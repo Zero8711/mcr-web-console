@@ -32,6 +32,8 @@ const els = {
   shareWan: document.getElementById('txt-share-wan'),
   shareUrl: document.getElementById('txt-share-url'),
   sharePeers: document.getElementById('share-peers'),
+  shareGuestBar: document.getElementById('share-guest-bar'),
+  shareGuestList: document.getElementById('share-guest-list'),
   shareWarning: document.getElementById('share-warning'),
   pagesHint: document.getElementById('pages-hint'),
   chatPanel: document.getElementById('chat-panel'),
@@ -771,6 +773,10 @@ async function startShare() {
   shareUrl = shareUrls[0];
   els.shareUrl.value = shareUrl;
   els.shareWarning.hidden = false;
+  if (els.shareGuestBar) {
+    els.shareGuestBar.hidden = false;
+  }
+  renderShareGuests({ guests: [] });
   els.chatPanel.hidden = false;
   els.cmdPanel.hidden = false;
   els.chatLog.textContent = '';
@@ -805,6 +811,9 @@ async function startShare() {
   };
 
   shareClient.onCmd = (text, from, slot) => {
+    if (!shareClient.guestMayCmd(from)) {
+      return;
+    }
     const pane = panes.find((item) => item.id === String(slot || '1'));
     if (!pane || !pane.isOpen) {
       return;
@@ -816,6 +825,9 @@ async function startShare() {
   };
 
   shareClient.onKeys = (text, from, slot) => {
+    if (!shareClient.guestMayCmd(from)) {
+      return;
+    }
     const pane = panes.find((item) => item.id === String(slot || '1'));
     pane?.writeKeys(text);
   };
@@ -840,6 +852,7 @@ async function startShare() {
 
   shareClient.onPeers = (info) => {
     els.sharePeers.textContent = ShareUtil.peerSummary(info);
+    renderShareGuests(info);
   };
 
   shareClient.onError = (message) => {
@@ -869,6 +882,10 @@ function stopShare(message) {
 
   els.shareUrl.value = '';
   els.shareWarning.hidden = true;
+  if (els.shareGuestBar) {
+    els.shareGuestBar.hidden = true;
+  }
+  renderShareGuests({ guests: [] });
   els.chatPanel.hidden = true;
   els.cmdPanel.hidden = true;
   els.sharePeers.textContent = '접속 0명';
@@ -1032,6 +1049,44 @@ function toSaveLocationError(err) {
 
 function readHostName() {
   return String(els.shareName?.value || '').replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
+function renderShareGuests(info) {
+  const listEl = els.shareGuestList;
+  if (!listEl) {
+    return;
+  }
+
+  const guests = ShareUtil.guestListFromPeers(info);
+  listEl.textContent = '';
+  if (!guests.length) {
+    const empty = document.createElement('span');
+    empty.className = 'share-guest-empty';
+    empty.textContent = '아직 입장한 사람이 없습니다.';
+    listEl.appendChild(empty);
+    return;
+  }
+
+  for (const guest of guests) {
+    const label = document.createElement('label');
+    label.className = 'share-guest-item' + (guest.canCmd ? ' has-cmd' : '');
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = guest.canCmd;
+    check.disabled = !guest.id;
+    check.title = guest.canCmd ? '명령을 허용 중입니다. 끄면 채팅만 됩니다.' : '켜면 이 사람이 장비에 명령을 넣을 수 있습니다.';
+    check.addEventListener('change', () => {
+      shareClient?.sendAllowCmd(guest.id, check.checked);
+    });
+
+    const name = document.createElement('span');
+    name.textContent = guest.name + (guest.canCmd ? ' · 명령' : ' · 채팅만');
+
+    label.appendChild(check);
+    label.appendChild(name);
+    listEl.appendChild(label);
+  }
 }
 
 function saveHostName(name) {

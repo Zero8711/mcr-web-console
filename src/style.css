@@ -371,6 +371,75 @@ body {
   width: 100%;
 }
 
+.toolbar-share-guests {
+  align-items: flex-start;
+}
+
+.toolbar-share-guests[hidden] {
+  display: none;
+}
+
+.share-guest-heading {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+.share-guest-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.share-guest-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.share-guest-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--input-bg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.share-guest-item.has-cmd {
+  border-color: #3d6b4f;
+  color: #b6e0c2;
+}
+
+.share-guest-item input {
+  margin: 0;
+}
+
+.guest-perm {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.guest-perm.allowed {
+  color: #b6e0c2;
+}
+
+.guest-readonly .toolbar-commands {
+  display: none;
+}
+
+.guest-readonly .cmd-panel .chat-form {
+  display: none;
+}
+
 .share-banner {
   margin: 0;
   padding: 8px 12px;

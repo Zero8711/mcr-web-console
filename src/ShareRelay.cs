@@ -704,6 +704,8 @@ public class ShareRelay
             Role = role,
             Name = name,
             RoomId = roomId,
+            Sid = role == "guest" ? Guid.NewGuid().ToString("N") : "",
+            CanCmd = false,
         };
 
         string error = null;
@@ -769,7 +771,14 @@ public class ShareRelay
             return null;
         }
 
-        socket.SendText("{\"type\":\"welcome\"}");
+        if (client.Role == "guest" && !string.IsNullOrEmpty(client.Sid))
+        {
+            socket.SendText("{\"type\":\"welcome\",\"id\":\"" + client.Sid + "\"}");
+        }
+        else
+        {
+            socket.SendText("{\"type\":\"welcome\"}");
+        }
         BroadcastPeers(roomId);
 
         if (!string.IsNullOrEmpty(consolesText))
@@ -880,7 +889,7 @@ public class ShareRelay
 
         Console.WriteLine("[share] guest " + client.Name + " (HTTP)");
         var events = new List<string>();
-        events.Add("{\"type\":\"welcome\"}");
+        events.Add("{\"type\":\"welcome\",\"id\":\"" + sid + "\"}");
         events.Add(PeersJson(roomId));
         if (!string.IsNullOrEmpty(consolesText))
         {
@@ -946,6 +955,10 @@ public class ShareRelay
         var type = Nz(msg.type);
         if (type == "cmd")
         {
+            if (!client.CanCmd)
+            {
+                return "{\"ok\":true}";
+            }
             var slot = SlotOf(msg);
             Console.WriteLine("[share] cmd " + client.Name + " " + Nz(msg.text));
             PublishCommandLog(client.RoomId, client.Name, Nz(msg.text), slot);
@@ -953,10 +966,18 @@ public class ShareRelay
         }
         else if (type == "cmdlog")
         {
+            if (!client.CanCmd)
+            {
+                return "{\"ok\":true}";
+            }
             PublishCommandLog(client.RoomId, client.Name, Nz(msg.text), SlotOf(msg));
         }
         else if (type == "keys")
         {
+            if (!client.CanCmd)
+            {
+                return "{\"ok\":true}";
+            }
             SendToHost(client.RoomId, WireMsg.Keys(Nz(msg.text), client.Name, SlotOf(msg)));
         }
         else if (type == "chat")
@@ -1056,26 +1077,69 @@ public class ShareRelay
 
     private static string PeersJson(string roomId)
     {
-        string hostName = "";
-        var guestNames = new List<string>();
-
         lock (Gate)
         {
             Room room;
-            if (Rooms.TryGetValue(roomId, out room))
+            if (!Rooms.TryGetValue(roomId, out room))
             {
-                if (room.Host != null)
+                return WireMsg.Peers("", new string[0], new string[0], new string[0]).ToJson();
+            }
+            return PeersOf(room).ToJson();
+        }
+    }
+
+    private static WireMsg PeersOf(Room room)
+    {
+        var hostName = room.Host != null ? room.Host.Name : "";
+        var names = new List<string>();
+        var ids = new List<string>();
+        var flags = new List<string>();
+
+        foreach (var guest in room.Guests)
+        {
+            names.Add(guest.Name);
+            ids.Add(guest.Sid ?? "");
+            flags.Add(guest.CanCmd ? "1" : "0");
+        }
+
+        return WireMsg.Peers(hostName, names.ToArray(), ids.ToArray(), flags.ToArray());
+    }
+
+    private static void SetGuestCommandAllow(string roomId, string guestId, bool allow)
+    {
+        if (string.IsNullOrEmpty(guestId))
+        {
+            return;
+        }
+
+        Client guest = null;
+        lock (Gate)
+        {
+            Room room;
+            if (!Rooms.TryGetValue(roomId, out room))
+            {
+                return;
+            }
+
+            foreach (var item in room.Guests)
+            {
+                if (item.Sid == guestId)
                 {
-                    hostName = room.Host.Name;
-                }
-                foreach (var guest in room.Guests)
-                {
-                    guestNames.Add(guest.Name);
+                    item.CanCmd = allow;
+                    guest = item;
+                    break;
                 }
             }
         }
 
-        return WireMsg.Peers(hostName, guestNames.ToArray()).ToJson();
+        if (guest == null)
+        {
+            return;
+        }
+
+        Console.WriteLine("[share] allowcmd " + guest.Name + " " + (allow ? "on" : "off"));
+        BroadcastPeers(roomId);
+        Deliver(guest, new WireMsg { type = "perm", text = allow ? "1" : "0" });
     }
 
     private static void ExpireHttpGuests()
@@ -1231,6 +1295,10 @@ public class ShareRelay
             }
             else if (type == "cmd" && client.Role == "guest")
             {
+                if (!client.CanCmd)
+                {
+                    continue;
+                }
                 var slot = SlotOf(msg);
                 Console.WriteLine("[ws] cmd " + client.Name + " " + Nz(msg.text));
                 PublishCommandLog(client.RoomId, client.Name, Nz(msg.text), slot);
@@ -1238,11 +1306,23 @@ public class ShareRelay
             }
             else if (type == "cmdlog")
             {
+                if (client.Role == "guest" && !client.CanCmd)
+                {
+                    continue;
+                }
                 PublishCommandLog(client.RoomId, client.Name, Nz(msg.text), SlotOf(msg));
             }
             else if (type == "keys" && client.Role == "guest")
             {
+                if (!client.CanCmd)
+                {
+                    continue;
+                }
                 SendToHost(client.RoomId, WireMsg.Keys(Nz(msg.text), client.Name, SlotOf(msg)));
+            }
+            else if (type == "allowcmd" && client.Role == "host")
+            {
+                SetGuestCommandAllow(client.RoomId, Nz(msg.id), Nz(msg.text) == "1");
             }
             else if (type == "consoles" && client.Role == "host")
             {
@@ -1643,8 +1723,7 @@ public class ShareRelay
 
     private static void BroadcastPeers(string roomId)
     {
-        string hostName = null;
-        var guestNames = new List<string>();
+        WireMsg payload = null;
         var targets = new List<Client>();
 
         lock (Gate)
@@ -1655,20 +1734,17 @@ public class ShareRelay
                 return;
             }
 
+            payload = PeersOf(room);
             if (room.Host != null)
             {
-                hostName = room.Host.Name;
                 targets.Add(room.Host);
             }
-
             foreach (var guest in room.Guests)
             {
-                guestNames.Add(guest.Name);
                 targets.Add(guest);
             }
         }
 
-        var payload = WireMsg.Peers(hostName ?? "", guestNames.ToArray());
         for (var i = 0; i < targets.Count; i++)
         {
             Deliver(targets[i], payload);
@@ -1786,6 +1862,7 @@ public class ShareRelay
         public string RoomId;
         public bool HttpMode;
         public string Sid;
+        public bool CanCmd;
         public DateTime LastSeen;
         public bool HttpClosed;
         public readonly Queue<string> HttpQueue = new Queue<string>();
@@ -1829,6 +1906,9 @@ public class WireMsg
     public string sid;
 
     [DataMember(EmitDefaultValue = false)]
+    public string id;
+
+    [DataMember(EmitDefaultValue = false)]
     public string slot;
 
     [DataMember(EmitDefaultValue = false)]
@@ -1839,6 +1919,12 @@ public class WireMsg
 
     [DataMember(EmitDefaultValue = false)]
     public string[] guests;
+
+    [DataMember(EmitDefaultValue = false)]
+    public string[] guestIds;
+
+    [DataMember(EmitDefaultValue = false)]
+    public string[] guestCanCmd;
 
     [DataMember(EmitDefaultValue = false)]
     public int guestCount;
@@ -1876,28 +1962,45 @@ public class WireMsg
         AppendField(sb, "text", text);
         AppendField(sb, "from", from);
         AppendField(sb, "sid", sid);
+        AppendField(sb, "id", id);
         AppendField(sb, "slot", slot);
         AppendField(sb, "message", message);
         AppendField(sb, "host", host);
+        AppendStringArray(sb, "guests", guests);
+        AppendStringArray(sb, "guestIds", guestIds);
+        AppendStringArray(sb, "guestCanCmd", guestCanCmd);
         if (guests != null)
         {
             if (sb[sb.Length - 1] != '{')
             {
                 sb.Append(',');
             }
-            sb.Append("\"guests\":[");
-            for (var i = 0; i < guests.Length; i++)
-            {
-                if (i > 0)
-                {
-                    sb.Append(',');
-                }
-                sb.Append('"').Append(Esc(guests[i])).Append('"');
-            }
-            sb.Append("],\"guestCount\":").Append(guests.Length);
+            sb.Append("\"guestCount\":").Append(guests.Length);
         }
         sb.Append('}');
         return sb.ToString();
+    }
+
+    private static void AppendStringArray(StringBuilder sb, string key, string[] values)
+    {
+        if (values == null)
+        {
+            return;
+        }
+        if (sb[sb.Length - 1] != '{')
+        {
+            sb.Append(',');
+        }
+        sb.Append('"').Append(key).Append("\":[");
+        for (var i = 0; i < values.Length; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(',');
+            }
+            sb.Append('"').Append(Esc(values[i] ?? "")).Append('"');
+        }
+        sb.Append(']');
     }
 
     private static void AppendField(StringBuilder sb, string key, string value)
@@ -1972,6 +2075,7 @@ public class WireMsg
             text = GetJsonString(json, "text"),
             from = GetJsonString(json, "from"),
             sid = GetJsonString(json, "sid"),
+            id = GetJsonString(json, "id"),
             slot = GetJsonString(json, "slot"),
             message = GetJsonString(json, "message"),
         };
@@ -2125,13 +2229,15 @@ public class WireMsg
         return new WireMsg { type = "error", message = message };
     }
 
-    public static WireMsg Peers(string hostName, string[] guestNames)
+    public static WireMsg Peers(string hostName, string[] guestNames, string[] guestIds, string[] guestCanCmd)
     {
         return new WireMsg
         {
             type = "peers",
             host = hostName,
             guests = guestNames,
+            guestIds = guestIds,
+            guestCanCmd = guestCanCmd,
             guestCount = guestNames.Length,
         };
     }

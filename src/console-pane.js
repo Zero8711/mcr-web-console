@@ -104,6 +104,13 @@
       this.root.classList.toggle('selected', yes);
     }
 
+    setInputEnabled(yes) {
+      if (this.mode !== 'guest') {
+        return;
+      }
+      this.term.options.disableStdin = !yes;
+    }
+
     isBarField(el) {
       return el === this.titleInput || el === this.find?.input;
     }
@@ -315,6 +322,7 @@
       this.resizeObserver.observe(this.termEl);
 
       if (this.mode === 'guest') {
+        this.term.options.disableStdin = true;
         this.term.onData((data) => {
           this.hooks.onGuestKeys?.(this, data);
         });

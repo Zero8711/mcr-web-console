@@ -12,6 +12,7 @@ const els = {
   statusDot: document.getElementById('status-dot'),
   statusText: document.getElementById('status-text'),
   peers: document.getElementById('share-peers'),
+  perm: document.getElementById('guest-perm'),
   warning: document.getElementById('browser-warning'),
   consoleStack: document.getElementById('console-stack'),
   quickCommands: document.getElementById('quick-commands'),
@@ -21,6 +22,7 @@ const els = {
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('txt-chat'),
   cmdLog: document.getElementById('cmd-log'),
+  cmdHeader: document.getElementById('cmd-header'),
   cmdForm: document.getElementById('cmd-form'),
   panelCmd: document.getElementById('txt-panel-cmd'),
   panelCmdSend: document.getElementById('btn-panel-cmd'),
@@ -31,6 +33,7 @@ const panes = [];
 let selectedPane = null;
 let shareClient = null;
 let joined = false;
+let canCmd = false;
 
 function currentPane() {
   return selectedPane || panes[0] || null;
@@ -58,14 +61,14 @@ function paneHooks() {
     onSelect: (pane, options) => selectPane(pane, options),
     onPaste: (pane) => pasteFromClipboard(pane),
     onGuestKeys: (pane, data) => {
-      if (!joined) {
+      if (!joined || !canCmd) {
         return;
       }
       shareClient?.sendKeys(data, pane.id);
       pane.collectTyped(data);
     },
     onShareCmdLog: (pane, text) => {
-      if (!joined) {
+      if (!joined || !canCmd) {
         return;
       }
       shareClient?.sendCmdLog(text, pane.id);
@@ -97,6 +100,7 @@ function ensurePane(id, title) {
     hooks: paneHooks(),
   });
   panes.push(pane);
+  pane.setInputEnabled(joined && canCmd);
   if (!selectedPane) {
     selectPane(pane);
   }
@@ -162,7 +166,7 @@ window.addEventListener('resize', fitAllPanes);
 window.visualViewport?.addEventListener('resize', fitAllPanes);
 
 bindQuickCommands();
-setCommandEnabled(false);
+applyGuestPerm(false);
 restoreGuestName();
 
 if (!room) {
@@ -174,7 +178,7 @@ if (!room) {
 } else {
   setStatus(false, '이름을 입력하고 접속하세요');
   writeGuide('[안내] 위쪽 이름칸에 본인 이름을 적은 뒤 [접속] 을 누르세요. 같은 링크로 여러 명이 들어올 수 있습니다.');
-  writeGuide('[안내] 장비가 여러 대면 칸이 같이 생깁니다. 명령을 넣을 칸을 클릭한 뒤 보내세요.');
+  writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 시험팀이 허용하면 열립니다.');
 }
 
 els.join.addEventListener('click', () => {
@@ -241,7 +245,8 @@ function connectShare() {
 
   saveGuestName(name);
   joined = false;
-  setCommandEnabled(false);
+  canCmd = false;
+  applyGuestPerm(false);
   els.join.disabled = true;
   shareClient?.disconnect();
   shareClient = new ShareClient({
@@ -257,12 +262,15 @@ function connectShare() {
 
   shareClient.onReady = () => {
     joined = true;
-    setCommandEnabled(true);
+    applyGuestPerm(shareClient.canCmd);
     els.join.disabled = false;
     els.join.textContent = '다시 접속';
     els.name.value = shareClient.name;
     setStatus(true, shareClient.name + ' · 공유 접속됨');
-    writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 명령을 넣을 콘솔 칸을 선택한 뒤 보내세요.', 'green');
+    writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 콘솔 보기와 채팅은 바로 됩니다.', 'green');
+    if (!shareClient.canCmd) {
+      writeGuide('[공유] 장비 명령은 시험팀이 허용하면 이 화면에 열립니다.');
+    }
     fitAllPanes();
     setTimeout(fitAllPanes, 200);
   };
@@ -307,9 +315,23 @@ function connectShare() {
     els.peers.textContent = ShareUtil.peerSummary(info);
   };
 
+  shareClient.onPerm = (allowed) => {
+    const changed = allowed !== canCmd;
+    applyGuestPerm(allowed);
+    if (!joined || !changed) {
+      return;
+    }
+    if (allowed) {
+      writeGuide('[공유] 시험팀이 명령 입력을 허용했습니다. 콘솔 칸을 선택한 뒤 보내세요.', 'green');
+    } else {
+      writeGuide('[공유] 명령 입력이 해제되었습니다. 화면 보기와 채팅만 됩니다.');
+    }
+  };
+
   shareClient.onError = (message) => {
     joined = false;
-    setCommandEnabled(false);
+    canCmd = false;
+    applyGuestPerm(false);
     els.join.disabled = false;
     els.join.textContent = '접속';
     setStatus(false, '접속 실패');
@@ -318,7 +340,8 @@ function connectShare() {
 
   shareClient.onClosed = (message) => {
     joined = false;
-    setCommandEnabled(false);
+    canCmd = false;
+    applyGuestPerm(false);
     els.join.disabled = false;
     els.join.textContent = '접속';
     setStatus(false, '공유 종료');
@@ -352,6 +375,10 @@ function sendConsoleCommand(command) {
   const pane = currentPane();
   if (!shareClient || !shareClient.connected) {
     writeGuide('[안내] 아직 시험팀 방에 들어가지 못했습니다. 상태가 초록이 된 뒤 보내세요.');
+    return;
+  }
+  if (!canCmd) {
+    writeGuide('[안내] 지금은 채팅만 됩니다. 명령은 시험팀이 허용해야 합니다.');
     return;
   }
   if (!pane) {
@@ -388,6 +415,25 @@ function setCommandEnabled(enabled) {
   const commandButtons = els.quickCommands.querySelectorAll('button');
   for (const button of commandButtons) {
     button.disabled = !enabled;
+  }
+}
+
+function applyGuestPerm(allowed) {
+  canCmd = Boolean(allowed);
+  document.getElementById('app')?.classList.toggle('guest-readonly', !canCmd);
+  setCommandEnabled(joined && canCmd);
+  for (const pane of panes) {
+    pane.setInputEnabled(joined && canCmd);
+  }
+  if (els.perm) {
+    els.perm.textContent = canCmd ? '명령 가능' : '채팅만';
+    els.perm.classList.toggle('allowed', canCmd);
+  }
+  if (els.cmdHeader) {
+    els.cmdHeader.textContent = canCmd ? '명령 기록' : '명령 기록 (입력 잠김)';
+  }
+  if (joined) {
+    fitAllPanes();
   }
 }
 
@@ -463,7 +509,7 @@ function pasteFromClipboard(pane) {
     return;
   }
   navigator.clipboard.readText().then((text) => {
-    if (!text || !joined || !target) {
+    if (!text || !joined || !canCmd || !target) {
       return;
     }
     shareClient.sendKeys(text, target.id);

@@ -15,10 +15,17 @@ COM 을 열려면 `https://` 또는 `http://127.0.0.1` 이어야 합니다.
 
 ## 두 가지 쓰는 법
 
-### 1) 이 PC USB 콘솔만 (GitHub Pages 가능)
+### 1) 이 PC USB 콘솔만 (GitHub Pages)
 
-GitHub 에 올린 뒤 Pages 를 켜면 `https://계정.github.io/저장소/` 에서 콘솔이 열립니다.
+공식 주소는 이것만 씁니다.
+
+```
+https://zero8711.github.io/mcr-web-console/index.html
+```
+
 출장·사내 어디서나 [연결] 로 **그 PC에 꽂힌 COM** 을 씁니다. VPN 이 없어도 됩니다.
+
+Pages 에 Custom domain / CNAME 을 넣지 마세요. 다른 도메인으로 넘어가면 현장이 열리지 않습니다.
 
 Pages 설정: Settings → Pages → Deploy from a branch → `main` / `/ (root)`.
 저장소 루트에 `index.html` 이 있어야 합니다. `.nojekyll` 이 있으면 Jekyll 처리를 건너뜁니다.

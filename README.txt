@@ -17,6 +17,9 @@ A) 원격을 여는 사람 (시험팀 PC)
 2. Chrome(또는 Edge)이 아래 주소로 열립니다.
      http://127.0.0.1:8765/
    COM 연결은 반드시 이 주소로만 하세요.
+   GitHub Pages 를 쓸 때는 아래만 엽니다.
+     https://zero8711.github.io/mcr-web-console/index.html
+   Pages 에 다른 도메인을 연결하지 마세요.
    
 3. [연결] 을 누르고 장비 COM 포트를 고릅니다.
    이미 Tera Term 등이 그 COM을 잡고 있으면 해제하세요.
