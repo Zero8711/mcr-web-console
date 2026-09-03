@@ -173,7 +173,6 @@ bindQuickCommands();
 applyGuestPerm(false);
 restoreGuestName();
 refreshJoinButton();
-schedulePassLockUnlock();
 
 if (!room) {
   els.warning.hidden = false;
@@ -182,9 +181,15 @@ if (!room) {
   els.join.disabled = true;
   writeGuide('[안내] join.html?room=... 형식의 링크로 접속하세요.');
 } else {
-  setStatus(false, '이름을 입력하고 접속하세요');
-  writeGuide('[안내] 이름과 시험팀에게 받은 비밀번호를 적은 뒤 [접속] 을 누르세요.');
-  writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 시험팀이 허용하면 열립니다.');
+  const remainMs = ShareUtil.storedPassRemainMs(room);
+  if (remainMs > 0) {
+    writeGuide('[안내] ' + passLockStatusText(remainMs));
+    schedulePassLockUnlock();
+  } else {
+    setStatus(false, '이름을 입력하고 접속하세요');
+    writeGuide('[안내] 이름과 시험팀에게 받은 비밀번호를 적은 뒤 [접속] 을 누르세요.');
+    writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 시험팀이 허용하면 열립니다.');
+  }
 }
 
 els.join.addEventListener('click', () => {
@@ -564,6 +569,13 @@ function stopPassLockTimer() {
 function schedulePassLockUnlock() {
   stopPassLockTimer();
   if (!room) {
+    return;
+  }
+
+  // 지금 잠겨 있을 때만 카운트다운을 돌린다.
+  // 잠금이 없는데 remain=0 으로 들어오면 "대기 시간이 끝났습니다" 가 나와서는 안 된다.
+  if (ShareUtil.storedPassRemainMs(room) <= 0) {
+    refreshJoinButton();
     return;
   }
 
