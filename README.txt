@@ -18,7 +18,7 @@ A) 원격을 여는 사람 (시험팀 PC)
      http://127.0.0.1:8765/
    COM 연결은 반드시 이 주소로만 하세요.
    GitHub Pages 를 쓸 때는 아래만 엽니다.
-     https://zero8711.github.io/mcr-web-console/index.html
+     https://zero8711.github.io/mcr-web-console/
    Pages 에 다른 도메인을 연결하지 마세요.
    
 3. [연결] 을 누르고 장비 COM 포트를 고릅니다.
@@ -77,5 +77,5 @@ B) 원격으로 접속하는 사람 (개발팀)
 - 연결.bat 창 또는 시험팀 Chrome 탭을 닫으면 원격 접속이 모두 끊깁니다.
 - 이름이 겹치면 나중에 들어온 사람은 이름2 로 표시됩니다.
 - 연결.bat 검은 창의 글자는 깨짐을 막기 위해 영어입니다. 사용 방법은 이 파일을 보세요.
-- GitHub Pages 는 이 PC COM 만 됩니다. 원격 공유는 연결.bat 입니다.
-  사외에서 같이 보려면 양쪽 사내 VPN 후 VPN 주소 링크를 쓰세요. 자세한 내용은 README.md.
+- GitHub Pages 공유는 사외/출장용입니다. 사내는 연결.bat 링크를 쓰세요.
+  자세한 내용은 README.md 를 보세요.
