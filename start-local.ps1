@@ -70,7 +70,9 @@ function Get-ApiInfoJson {
     [int]$Port,
     [string[]]$LanUrls,
     [string]$LocalUrl,
-    [string]$WanUrl = ''
+    [string]$WanUrl = '',
+    [string]$UpnpInternal = '',
+    [bool]$FirewallOk = $false
   )
 
   if (-not $LanUrls) {
@@ -86,7 +88,9 @@ function Get-ApiInfoJson {
   $urlsJson = '[' + ($escaped -join ',') + ']'
   $localSafe = $LocalUrl.Replace('\', '\\').Replace('"', '\"')
   $wanSafe = ([string]$WanUrl).Replace('\', '\\').Replace('"', '\"')
-  return "{`"port`":$Port,`"urls`":$urlsJson,`"local`":`"$localSafe`",`"wan`":`"$wanSafe`"}"
+  $upnpSafe = ([string]$UpnpInternal).Replace('\', '\\').Replace('"', '\"')
+  $fwJson = if ($FirewallOk) { 'true' } else { 'false' }
+  return "{`"port`":$Port,`"urls`":$urlsJson,`"local`":`"$localSafe`",`"wan`":`"$wanSafe`",`"upnpInternal`":`"$upnpSafe`",`"firewall`":$fwJson}"
 }
 
 function Test-VpnOrVirtualAdapter {
@@ -127,8 +131,43 @@ function Resolve-IPv4String {
   return $null
 }
 
-# Router-facing LAN IP. VPN adapters are skipped so UPnP maps the PC the router knows.
+# Higher is better. ipTIME LAN is almost always 192.168; 172.16-31 is often tether/VM.
+function Get-LanAdapterScore {
+  param(
+    [string]$Ip,
+    [string]$Name
+  )
+
+  if (-not $Ip) {
+    return -1
+  }
+  if ($Ip -like '127.*' -or $Ip -like '169.254.*') {
+    return -1
+  }
+  if (Test-VpnOrVirtualAdapter $Name) {
+    return -1
+  }
+  if (-not (Test-PrivateIPv4 $Ip)) {
+    return -1
+  }
+  if ($Ip -like '192.168.*') {
+    return 100
+  }
+  if ($Ip -like '10.*') {
+    return 80
+  }
+  if ($Ip -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.') {
+    return 40
+  }
+  return 10
+}
+
+# Router-facing LAN IP. VPN/tether adapters are skipped so UPnP maps the PC the router knows.
 function Get-UpnpInternalIPv4 {
+  $bestIp = $null
+  $bestScore = -1
+  $bestName = ''
+
   try {
     $configs = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object {
       $_.IPEnabled -and $_.DefaultIPGateway
@@ -136,31 +175,38 @@ function Get-UpnpInternalIPv4 {
     foreach ($cfg in $configs) {
       $adapter = Get-CimInstance Win32_NetworkAdapter -Filter "Index=$($cfg.Index)" -ErrorAction SilentlyContinue
       $name = [string]($adapter.NetConnectionID + ' ' + $adapter.Name)
-      if (Test-VpnOrVirtualAdapter $name) {
-        continue
-      }
-
       $ip = @($cfg.IPAddress) | Where-Object {
-        $_ -match '^\d+\.\d+\.\d+\.\d+$' -and $_ -notlike '127.*' -and $_ -notlike '169.254.*'
+        $_ -match '^\d+\.\d+\.\d+\.\d+$'
       } | Select-Object -First 1
-      if ($ip) {
-        return [string]$ip
+      $score = Get-LanAdapterScore -Ip ([string]$ip) -Name $name
+      if ($score -gt $bestScore) {
+        $bestScore = $score
+        $bestIp = [string]$ip
+        $bestName = $name
       }
     }
   } catch {
     # Fall through to NIC scan
   }
 
-  foreach ($ip in @(Get-LanIPv4List)) {
-    if ($ip -like '192.168.*') {
-      return $ip
+  if (-not $bestIp) {
+    foreach ($ip in @(Get-LanIPv4List)) {
+      $score = Get-LanAdapterScore -Ip $ip -Name ''
+      if ($score -gt $bestScore) {
+        $bestScore = $score
+        $bestIp = [string]$ip
+      }
     }
   }
-  $first = @(Get-LanIPv4List) | Select-Object -First 1
-  if ($first) {
-    return [string]$first
+
+  if ($bestIp) {
+    if ($bestName) {
+      Write-Host "UPnP internal IP: $bestIp ($bestName)"
+    } else {
+      Write-Host "UPnP internal IP: $bestIp"
+    }
   }
-  return $null
+  return $bestIp
 }
 
 function Add-UpnpPortMapping {
@@ -193,22 +239,44 @@ function Add-UpnpPortMapping {
     $script:UpnpAdded = $true
 
     $ext = $null
+    $mappedInternal = $null
+    $enabled = $true
     try {
-      $ext = Resolve-IPv4String $maps.Item($Port, 'TCP').ExternalIPAddress
+      $item = $maps.Item($Port, 'TCP')
+      $ext = Resolve-IPv4String $item.ExternalIPAddress
+      $mappedInternal = Resolve-IPv4String $item.InternalClient
+      $enabled = [bool]$item.Enabled
     } catch {
       $ext = $null
     }
 
-    Write-Host "UPnP: TCP $Port -> ${InternalIp}:$Port"
+    if ($mappedInternal -and $mappedInternal -ne $InternalIp) {
+      Write-Host "UPnP: router stored $mappedInternal, expected $InternalIp. Re-adding."
+      try {
+        $maps.Remove($Port, 'TCP')
+      } catch {
+        # Keep going and Add again
+      }
+      $maps.Add($Port, 'TCP', $Port, $InternalIp, $true, 'WEB Serial Console')
+      $mappedInternal = $InternalIp
+    }
+
+    $targetIp = $mappedInternal
+    if (-not $targetIp) {
+      $targetIp = $InternalIp
+    }
+    Write-Host "UPnP: TCP $Port -> ${targetIp}:$Port"
+    if ($enabled -eq $false) {
+      Write-Host "UPnP: mapping is disabled in the router. Enable it, or add a manual TCP $Port forward."
+    }
     if (-not $ext -or $ext -like '0.*') {
       Write-Host "UPnP: mapping added, but WAN IP was empty. Check the router WAN address."
       return $null
     }
 
     Write-Host "UPnP: WAN $ext"
-    if (-not (Test-PrivateIPv4 $ext)) {
-      Write-Host "UPnP: this WAN address looks public. The share link may be reachable outside the company LAN."
-    }
+    Write-Host "UPnP: PCs on this Wi-Fi must use http://${targetIp}:$Port/  (WAN times out from inside the router)."
+    Write-Host "UPnP: other subnets: if Chrome times out on ${ext}:$Port, check the router forward list and Windows firewall."
     return $ext
   } catch {
     Write-Host "UPnP: skipped. $($_.Exception.Message)"
@@ -232,6 +300,46 @@ function Remove-UpnpPortMapping {
   }
 
   $script:UpnpAdded = $false
+}
+
+function Get-FirewallRuleName {
+  param([int]$Port)
+
+  return "WEB Serial Console $Port"
+}
+
+function Test-InboundFirewallRule {
+  param([int]$Port)
+
+  $ruleName = Get-FirewallRuleName -Port $Port
+  netsh advfirewall firewall show rule name="$ruleName" 2>$null | Out-Null
+  return ($LASTEXITCODE -eq 0)
+}
+
+# Other-band PCs time out if Windows drops inbound TCP. Adding a rule needs Administrator.
+function Add-InboundFirewallRule {
+  param([int]$Port)
+
+  $ruleName = Get-FirewallRuleName -Port $Port
+  if (Test-InboundFirewallRule -Port $Port) {
+    Write-Host "Firewall: inbound TCP $Port already allowed."
+    return $true
+  }
+
+  if (-not (Test-IsAdmin)) {
+    Write-Host "Firewall: no inbound rule for TCP $Port."
+    Write-Host "Firewall: other-band PCs will time out until you run mcr_console.bat as Administrator once."
+    return $false
+  }
+
+  netsh advfirewall firewall add rule name="$ruleName" dir=in action=allow protocol=TCP localport=$Port profile=any | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Firewall: added inbound TCP $Port ($ruleName)."
+    return $true
+  }
+
+  Write-Host "Firewall: could not add the inbound rule."
+  return $false
 }
 
 function Initialize-ShareRelay {
@@ -301,24 +409,14 @@ if ($upnpWanIp) {
 }
 
 Write-Host ""
-Write-Host "If the firewall blocks other PCs, run as Administrator:"
-Write-Host "  netsh advfirewall firewall add rule name=`"WEB Serial Console $port`" dir=in action=allow protocol=TCP localport=$port"
-Write-Host ""
 Write-Host "Closing this window stops the local server and tries to undo UPnP."
 Write-Host "See README.txt for how to share with remote users."
 
-if (Test-IsAdmin) {
-  $ruleName = "WEB Serial Console $port"
-  netsh advfirewall firewall show rule name="$ruleName" 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    netsh advfirewall firewall add rule name="$ruleName" dir=in action=allow protocol=TCP localport=$port | Out-Null
-    Write-Host "Added firewall rule '$ruleName'."
-  }
-}
+$firewallOk = Add-InboundFirewallRule -Port $port
 
 Start-Process $loopbackUrl
 
-$apiJson = Get-ApiInfoJson -Port $port -LanUrls @($lanUrls.ToArray()) -LocalUrl $loopbackUrl.TrimEnd('/') -WanUrl $wanUrl
+$apiJson = Get-ApiInfoJson -Port $port -LanUrls @($lanUrls.ToArray()) -LocalUrl $loopbackUrl.TrimEnd('/') -WanUrl $wanUrl -UpnpInternal ([string]$upnpInternalIp) -FirewallOk $firewallOk
 
 try {
   [ShareHttpServer]::Run($root, $port, $apiJson)

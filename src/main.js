@@ -911,6 +911,12 @@ async function startShare() {
     } else if (info?.wan) {
       pane?.term.writeln('\x1b[33m[공유] UPnP 맨 위 링크는 공유기 밖(다른 자리 사내망) PC 용입니다.\x1b[0m');
       pane?.term.writeln('\x1b[33m       같은 공유기 Wi-Fi/유선에 있는 PC 는 노트북 IP(192.168.…) 링크를 쓰세요. UPnP 주소는 안에서 안 열리는 경우가 많습니다.\x1b[0m');
+      if (info.firewall === false) {
+        pane?.term.writeln('\x1b[33m[공유] Windows 방화벽에 TCP 8765 규칙이 없습니다. 다른 대역에서 연결 시간 초과가 나면, mcr_console.bat 을 관리자로 한 번 실행하세요.\x1b[0m');
+      }
+      if (info.upnpInternal) {
+        pane?.term.writeln('\x1b[33m[공유] ipTIME 포트포워드 대상은 ' + info.upnpInternal + ' 이어야 합니다. 목록이 비어 있거나 다른 IP 이면 UPnP 가 실제로 안 열린 것입니다.\x1b[0m');
+      }
     } else if (readWanBase(info?.port)) {
       pane?.term.writeln('\x1b[33m[공유] 공유기 사내 IP 링크를 맨 위에 넣었습니다. ipTIME 에서 TCP 8765 를 이 노트북으로 포트포워드 하세요.\x1b[0m');
     } else {
@@ -1018,7 +1024,7 @@ async function fetchShareInfo() {
   const response = await fetch('/api/info', { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(
-      '중계가 없는 예전 서버입니다. 연결.bat 을 다시 실행한 뒤, 이 페이지를 새로 고침하세요.'
+      '중계가 없는 예전 서버입니다. mcr_console.bat 을 다시 실행한 뒤, 이 페이지를 새로 고침하세요.'
     );
   }
   return response.json();
@@ -1249,7 +1255,7 @@ function getSerialBlockReason() {
   }
 
   if (location.protocol === 'file:') {
-    return 'HTML 파일을 직접 열면 COM 을 열 수 없습니다. 연결.bat 을 실행하거나 https:// 로 열어 주세요.';
+    return 'HTML 파일을 직접 열면 COM 을 열 수 없습니다. mcr_console.bat 을 실행하거나 https:// 로 열어 주세요.';
   }
 
   if (!window.isSecureContext) {
