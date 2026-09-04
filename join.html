@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔 · 원격</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20260903a" />
+    <link rel="stylesheet" href="./src/style.css?v=20260904b" />
   </head>
   <body>
     <div id="app" class="guest-app guest-readonly">
@@ -73,17 +73,24 @@
         처음에는 콘솔 보기와 채팅만 됩니다. 장비 명령은 시험팀이 허용하면 열립니다.
       </p>
 
+      <div id="aging-hit-bar" class="toolbar aging-hit-bar">
+        <div class="aging-hit-heading">이상로그 발생</div>
+        <div id="aging-hit-list" class="aging-hit-list">
+          <span class="aging-hit-empty">시험팀이 감시를 켜면 여기에 횟수가 보입니다.</span>
+        </div>
+      </div>
+
       <div class="workspace">
         <div id="console-stack" class="console-stack"></div>
         <aside id="chat-panel" class="chat-panel">
-          <div class="chat-header">채팅</div>
+          <div class="chat-header">채팅 · 로그 파일 놓기</div>
           <div id="chat-log" class="chat-log"></div>
           <form id="chat-form" class="chat-form">
             <input
               id="txt-chat"
               type="text"
               spellcheck="false"
-              placeholder="대화 입력"
+              placeholder="대화 입력 · 로그 파일은 창에 놓기"
             />
             <button type="submit" class="btn">보내기</button>
           </form>
@@ -105,15 +112,26 @@
       </div>
     </div>
 
+    <div id="alert-modal" class="alert-modal" hidden>
+      <div class="alert-modal-box" role="dialog" aria-labelledby="alert-modal-title">
+        <h2 id="alert-modal-title">이상로그 감지</h2>
+        <p id="alert-modal-console" class="alert-modal-console"></p>
+        <p id="alert-modal-time" class="alert-modal-time"></p>
+        <pre id="alert-modal-line" class="alert-modal-line"></pre>
+        <p id="alert-modal-file" class="alert-modal-file"></p>
+        <button id="btn-alert-ok" type="button" class="btn btn-primary">확인</button>
+      </div>
+    </div>
+
     <script src="./vendor/xterm.js"></script>
     <script src="./vendor/addon-fit.js"></script>
     <script src="./src/commands.js"></script>
     <script src="./src/log-view.js?v=20260901k"></script>
     <script src="./vendor/peerjs.min.js"></script>
-    <script src="./src/share.js?v=20260903e"></script>
+    <script src="./src/share.js?v=20260904b"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
     <script src="./src/console-pane.js?v=20260902g"></script>
-    <script src="./src/join.js?v=20260903h"></script>
+    <script src="./src/join.js?v=20260904b"></script>
   </body>
 </html>

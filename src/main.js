@@ -146,11 +146,26 @@ function paneHooks() {
     },
     onAgingTriggered: (pane, keyword, fileName, triggerLine, timeText) => {
       showAbnormalAlert(pane, keyword, fileName, triggerLine, timeText);
+      if (!shareClient) {
+        return;
+      }
+      shareClient.sendAging(
+        'alert',
+        pane.id,
+        JSON.stringify({
+          keyword: keyword,
+          fileName: fileName,
+          triggerLine: triggerLine,
+          timeText: timeText,
+          title: pane.title,
+        })
+      );
     },
     onAgingHits: (pane, list) => {
       if (pane === currentPane()) {
         renderAgingHits(list);
       }
+      scheduleAgingHitsShare(pane);
     },
   };
 }
@@ -254,50 +269,38 @@ function applyAgingState(state) {
 }
 
 function renderAgingHits(list) {
-  const box = els.agingHitList;
-  if (!box) {
+  ShareUtil.renderAgingHitList(els.agingHitList, list, {
+    clearButton: els.agingHitClear,
+    emptyText: '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.',
+  });
+}
+
+const agingHitShareTimers = {};
+
+function scheduleAgingHitsShare(pane) {
+  if (!shareClient || !pane || !pane.agingLog) {
     return;
   }
-
-  box.replaceChildren();
-  const rows = Array.isArray(list) ? list : [];
-
-  if (!rows.length) {
-    const empty = document.createElement('span');
-    empty.className = 'aging-hit-empty';
-    empty.textContent = '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.';
-    box.appendChild(empty);
-    if (els.agingHitClear) {
-      els.agingHitClear.disabled = true;
-    }
+  const id = pane.id;
+  if (agingHitShareTimers[id]) {
     return;
   }
+  agingHitShareTimers[id] = setTimeout(() => {
+    agingHitShareTimers[id] = null;
+    broadcastAgingHits(pane);
+  }, 400);
+}
 
-  let anyHit = false;
-  for (const item of rows) {
-    const count = Number(item.count) || 0;
-    if (count > 0) {
-      anyHit = true;
-    }
-
-    const chip = document.createElement('span');
-    chip.className = 'aging-hit-item' + (count > 0 ? ' has-hit' : '');
-
-    const name = document.createElement('strong');
-    name.textContent = item.keyword;
-
-    const last = count > 0 && item.lastTime ? item.lastTime : '-';
-    const meta = document.createElement('span');
-    meta.textContent = count + '회 · 마지막 ' + last;
-
-    chip.title = item.keyword + '  ' + count + '회  마지막 ' + last;
-    chip.appendChild(name);
-    chip.appendChild(meta);
-    box.appendChild(chip);
+function broadcastAgingHits(pane) {
+  if (!shareClient || !pane || !pane.agingLog) {
+    return;
   }
+  shareClient.sendAging('hits', pane.id, JSON.stringify(pane.agingLog.getHitList()));
+}
 
-  if (els.agingHitClear) {
-    els.agingHitClear.disabled = !anyHit;
+function broadcastAllAgingHits() {
+  for (const pane of panes) {
+    broadcastAgingHits(pane);
   }
 }
 
@@ -482,6 +485,21 @@ els.chatForm.addEventListener('submit', (event) => {
   const text = els.chatInput.value;
   els.chatInput.value = '';
   sendHostChat(text);
+});
+
+ShareUtil.bindChatFileDrop(els.chatPanel, (fileName, text, error) => {
+  if (error) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', error, '');
+    return;
+  }
+  if (!shareClient) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', '공유가 켜진 뒤에 파일을 놓으세요.', '');
+    return;
+  }
+  const sendError = shareClient.sendFile(fileName, text);
+  if (sendError) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', sendError, '');
+  }
 });
 
 if (els.cmdForm) {
@@ -901,6 +919,7 @@ async function startShare() {
       pane?.term.writeln('\x1b[33m[공유] LAN IP 를 찾지 못했습니다. 다른 PC 는 접속하지 못할 수 있습니다.\x1b[0m');
     }
     broadcastConsoles();
+    broadcastAllAgingHits();
   };
 
   shareClient.onCmd = (text, from, slot) => {
@@ -927,6 +946,10 @@ async function startShare() {
 
   shareClient.onChat = (text, from) => {
     ShareUtil.appendChatLine(els.chatLog, from, text, shareClient.name);
+  };
+
+  shareClient.onFile = (fileName, content, from) => {
+    ShareUtil.appendChatFile(els.chatLog, from, fileName, content, shareClient.name);
   };
 
   shareClient.onCmdLog = (text, from, slot) => {

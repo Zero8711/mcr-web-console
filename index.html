@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20260904a" />
+    <link rel="stylesheet" href="./src/style.css?v=20260904b" />
   </head>
   <body>
     <div id="app">
@@ -207,14 +207,14 @@
       <div class="workspace">
         <div id="console-stack" class="console-stack"></div>
         <aside id="chat-panel" class="chat-panel" hidden>
-          <div class="chat-header">채팅</div>
+          <div class="chat-header">채팅 · 로그 파일 놓기</div>
           <div id="chat-log" class="chat-log"></div>
           <form id="chat-form" class="chat-form">
             <input
               id="txt-chat"
               type="text"
               spellcheck="false"
-              placeholder="대화 입력"
+              placeholder="대화 입력 · 로그 파일은 창에 놓기"
             />
             <button type="submit" class="btn">보내기</button>
           </form>
@@ -254,10 +254,10 @@
     <script src="./src/commands.js"></script>
     <script src="./src/log-view.js?v=20260901k"></script>
     <script src="./vendor/peerjs.min.js"></script>
-    <script src="./src/share.js?v=20260903e"></script>
+    <script src="./src/share.js?v=20260904b"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
     <script src="./src/console-pane.js?v=20260904a"></script>
-    <script src="./src/main.js?v=20260904a"></script>
+    <script src="./src/main.js?v=20260904b"></script>
   </body>
 </html>

@@ -713,6 +713,8 @@ public class ShareRelay
         string error = null;
         List<string> history = null;
         List<string> cmdHistory = null;
+        List<string> fileHistory = null;
+        List<string> agingItems = null;
         string consolesText = null;
 
         lock (Gate)
@@ -771,6 +773,8 @@ public class ShareRelay
                         room.Guests.Add(client);
                         history = new List<string>(room.History);
                         cmdHistory = new List<string>(room.CmdHistory);
+                        fileHistory = new List<string>(room.FileHistory);
+                        agingItems = AgingSnapshot(room);
                         consolesText = room.ConsolesText;
                     }
                 }
@@ -811,6 +815,8 @@ public class ShareRelay
                 socket.SendText(cmdHistory[i]);
             }
         }
+
+        SendAgingAndFiles(socket, agingItems, fileHistory);
 
         return client;
     }
@@ -867,6 +873,8 @@ public class ShareRelay
         string error = null;
         List<string> history = null;
         List<string> cmdHistory = null;
+        List<string> fileHistory = null;
+        List<string> agingItems = null;
         string consolesText = null;
 
         lock (Gate)
@@ -892,6 +900,8 @@ public class ShareRelay
                     room.Guests.Add(client);
                     history = new List<string>(room.History);
                     cmdHistory = new List<string>(room.CmdHistory);
+                    fileHistory = new List<string>(room.FileHistory);
+                    agingItems = AgingSnapshot(room);
                     consolesText = room.ConsolesText;
                 }
             }
@@ -922,6 +932,7 @@ public class ShareRelay
                 events.Add(cmdHistory[i]);
             }
         }
+        AppendAgingAndFiles(events, agingItems, fileHistory);
 
         BroadcastPeers(roomId);
         return "{\"ok\":true,\"sid\":\"" + sid + "\",\"name\":\"" + JsonEsc(client.Name) + "\",\"events\":[" + string.Join(",", events.ToArray()) + "]}";
@@ -999,6 +1010,10 @@ public class ShareRelay
         else if (type == "chat")
         {
             BroadcastAll(client.RoomId, WireMsg.Chat(Nz(msg.text), client.Name));
+        }
+        else if (type == "file")
+        {
+            RememberAndBroadcastFile(client.RoomId, Nz(msg.name), Nz(msg.text), client.Name);
         }
         else if (type == "rename")
         {
@@ -1472,9 +1487,18 @@ public class ShareRelay
                 SaveConsoles(client.RoomId, Nz(msg.text));
                 BroadcastToGuests(client.RoomId, WireMsg.Consoles(Nz(msg.text)));
             }
+            else if (type == "aging" && client.Role == "host")
+            {
+                RememberAging(client.RoomId, Nz(msg.name), SlotOf(msg), Nz(msg.text));
+                BroadcastToGuests(client.RoomId, WireMsg.Aging(Nz(msg.name), SlotOf(msg), Nz(msg.text)));
+            }
             else if (type == "chat")
             {
                 BroadcastAll(client.RoomId, WireMsg.Chat(Nz(msg.text), client.Name));
+            }
+            else if (type == "file")
+            {
+                RememberAndBroadcastFile(client.RoomId, Nz(msg.name), Nz(msg.text), client.Name);
             }
             else if (type == "rename")
             {
@@ -1592,6 +1616,121 @@ public class ShareRelay
         }
 
         BroadcastAll(roomId, WireMsg.Rename(clean, slot));
+    }
+
+    private static List<string> AgingSnapshot(Room room)
+    {
+        var list = new List<string>();
+        if (room == null || room.AgingBySlot == null)
+        {
+            return list;
+        }
+        foreach (var pair in room.AgingBySlot)
+        {
+            if (!string.IsNullOrEmpty(pair.Value))
+            {
+                list.Add(pair.Value);
+            }
+        }
+        return list;
+    }
+
+    private static void RememberAging(string roomId, string kind, string slot, string text)
+    {
+        if (kind != "hits")
+        {
+            return;
+        }
+
+        var json = WireMsg.Aging(kind, slot, text).ToJson();
+        lock (Gate)
+        {
+            Room room;
+            if (!Rooms.TryGetValue(roomId, out room))
+            {
+                return;
+            }
+            room.AgingBySlot[SlotOrDefaultForRename(slot)] = json;
+        }
+    }
+
+    private static void RememberAndBroadcastFile(string roomId, string name, string text, string from)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var payload = WireMsg.File(name, text, from);
+        lock (Gate)
+        {
+            Room room;
+            if (Rooms.TryGetValue(roomId, out room))
+            {
+                room.FileHistory.Add(payload.ToJson());
+                while (room.FileHistory.Count > 5)
+                {
+                    room.FileHistory.RemoveAt(0);
+                }
+            }
+        }
+        BroadcastAll(roomId, payload);
+    }
+
+    private static void SendAgingAndFiles(WsConn socket, List<string> agingItems, List<string> fileHistory)
+    {
+        if (socket == null)
+        {
+            return;
+        }
+        if (agingItems != null)
+        {
+            for (var i = 0; i < agingItems.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(agingItems[i]))
+                {
+                    socket.SendText(agingItems[i]);
+                }
+            }
+        }
+        if (fileHistory != null)
+        {
+            for (var i = 0; i < fileHistory.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(fileHistory[i]))
+                {
+                    socket.SendText(fileHistory[i]);
+                }
+            }
+        }
+    }
+
+    private static void AppendAgingAndFiles(List<string> events, List<string> agingItems, List<string> fileHistory)
+    {
+        if (events == null)
+        {
+            return;
+        }
+        if (agingItems != null)
+        {
+            for (var i = 0; i < agingItems.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(agingItems[i]))
+                {
+                    events.Add(agingItems[i]);
+                }
+            }
+        }
+        if (fileHistory != null)
+        {
+            for (var i = 0; i < fileHistory.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(fileHistory[i]))
+                {
+                    events.Add(fileHistory[i]);
+                }
+            }
+        }
     }
 
     private static string SlotOrDefaultForRename(string slot)
@@ -2019,6 +2158,8 @@ public class ShareRelay
         public readonly List<Client> Guests = new List<Client>();
         public readonly List<string> History = new List<string>();
         public readonly List<string> CmdHistory = new List<string>();
+        public readonly List<string> FileHistory = new List<string>();
+        public readonly Dictionary<string, string> AgingBySlot = new Dictionary<string, string>();
         public string ConsolesText;
         public string Password;
         public readonly Dictionary<string, PassGuard> PassGuards = new Dictionary<string, PassGuard>();
@@ -2373,6 +2514,16 @@ public class WireMsg
     public static WireMsg Rename(string text, string slot)
     {
         return new WireMsg { type = "rename", text = text, slot = SlotOrDefault(slot) };
+    }
+
+    public static WireMsg Aging(string kind, string slot, string text)
+    {
+        return new WireMsg { type = "aging", name = kind, text = text, slot = SlotOrDefault(slot) };
+    }
+
+    public static WireMsg File(string name, string text, string from)
+    {
+        return new WireMsg { type = "file", name = name, text = text, from = from };
     }
 
     private static string SlotOrDefault(string slot)

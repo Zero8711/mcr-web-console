@@ -23,6 +23,14 @@ const els = {
   chatLog: document.getElementById('chat-log'),
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('txt-chat'),
+  chatPanel: document.getElementById('chat-panel'),
+  agingHitList: document.getElementById('aging-hit-list'),
+  alertModal: document.getElementById('alert-modal'),
+  alertConsole: document.getElementById('alert-modal-console'),
+  alertTime: document.getElementById('alert-modal-time'),
+  alertLine: document.getElementById('alert-modal-line'),
+  alertFile: document.getElementById('alert-modal-file'),
+  alertOk: document.getElementById('btn-alert-ok'),
   cmdLog: document.getElementById('cmd-log'),
   cmdHeader: document.getElementById('cmd-header'),
   cmdForm: document.getElementById('cmd-form'),
@@ -31,6 +39,7 @@ const els = {
   clear: document.getElementById('btn-clear'),
 };
 
+const PAGE_TITLE = document.title;
 const panes = [];
 let selectedPane = null;
 let shareClient = null;
@@ -38,6 +47,8 @@ let joined = false;
 let joining = false;
 let canCmd = false;
 let passLockTimer = null;
+let titleBlinkTimer = null;
+const agingHitsBySlot = {};
 
 function currentPane() {
   return selectedPane || panes[0] || null;
@@ -119,6 +130,7 @@ function selectPane(pane, options) {
   for (const item of panes) {
     item.setSelected(item === pane);
   }
+  renderGuestAgingHits(pane.id);
   if (!options?.keepFocus && document.activeElement !== pane.titleInput) {
     pane.focus();
   }
@@ -252,6 +264,27 @@ els.chatForm.addEventListener('submit', (event) => {
   sendGuestText(text);
 });
 
+ShareUtil.bindChatFileDrop(els.chatPanel, (fileName, text, error) => {
+  if (error) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', error, '');
+    return;
+  }
+  if (!shareClient || !joined) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', '접속한 뒤에 파일을 놓으세요.', '');
+    return;
+  }
+  const sendError = shareClient.sendFile(fileName, text);
+  if (sendError) {
+    ShareUtil.appendChatLine(els.chatLog, '안내', sendError, '');
+  }
+});
+
+if (els.alertOk) {
+  els.alertOk.addEventListener('click', () => {
+    hideAbnormalAlert();
+  });
+}
+
 els.cmdForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const text = els.panelCmd.value;
@@ -364,6 +397,14 @@ function connectShare() {
     ShareUtil.appendChatLine(els.chatLog, from, text, shareClient.name);
   };
 
+  shareClient.onFile = (fileName, content, from) => {
+    ShareUtil.appendChatFile(els.chatLog, from, fileName, content, shareClient.name);
+  };
+
+  shareClient.onAging = (kind, slot, text) => {
+    handleGuestAging(kind, slot, text);
+  };
+
   shareClient.onCmdLog = (text, from, slot) => {
     const title = findPane(slot)?.title || ('장비 ' + slot);
     ShareUtil.appendCmdLine(els.cmdLog, from, '[' + title + '] ' + text, shareClient.name);
@@ -419,10 +460,95 @@ function connectShare() {
     refreshJoinButton();
     setStatus(false, '공유 종료');
     els.peers.textContent = '접속 0명';
+    hideAbnormalAlert();
     writeGuide('[공유] ' + message);
   };
 
   shareClient.connect();
+}
+
+function renderGuestAgingHits(slot) {
+  const list = agingHitsBySlot[String(slot || currentPane()?.id || '1')] || [];
+  ShareUtil.renderAgingHitList(els.agingHitList, list, {
+    emptyText: '시험팀이 감시를 켜면 여기에 횟수가 보입니다.',
+  });
+}
+
+function handleGuestAging(kind, slot, text) {
+  const id = String(slot || '1');
+  if (kind === 'hits') {
+    let list = [];
+    try {
+      list = JSON.parse(text || '[]');
+    } catch {
+      return;
+    }
+    agingHitsBySlot[id] = Array.isArray(list) ? list : [];
+    if (!currentPane() || currentPane().id === id) {
+      renderGuestAgingHits(id);
+    }
+    return;
+  }
+
+  if (kind !== 'alert') {
+    return;
+  }
+
+  let data = {};
+  try {
+    data = JSON.parse(text || '{}');
+  } catch {
+    data = {};
+  }
+
+  const title = data.title || ('장비 ' + id);
+  const keyword = data.keyword || '';
+  ensurePane(id, title);
+  writeGuide('[이상로그] ' + title + " 에서 '" + keyword + "' 감지.", 'red');
+  showAbnormalAlert(title, keyword, data.fileName, data.triggerLine, data.timeText);
+}
+
+function showAbnormalAlert(title, keyword, fileName, triggerLine, timeText) {
+  if (els.alertConsole) {
+    els.alertConsole.textContent = title || '장비';
+  }
+  if (els.alertTime) {
+    els.alertTime.textContent = timeText ? 'time : ' + timeText : '';
+  }
+  if (els.alertLine) {
+    els.alertLine.textContent = triggerLine || keyword || '';
+  }
+  if (els.alertFile) {
+    els.alertFile.textContent = fileName ? '시험팀 저장: ' + fileName : '';
+  }
+  if (els.alertModal) {
+    els.alertModal.hidden = false;
+  }
+  startTitleBlink();
+}
+
+function hideAbnormalAlert() {
+  if (els.alertModal) {
+    els.alertModal.hidden = true;
+  }
+  stopTitleBlink();
+}
+
+function startTitleBlink() {
+  stopTitleBlink();
+  let mark = false;
+  titleBlinkTimer = setInterval(() => {
+    document.title = mark ? PAGE_TITLE : '【이상로그】 ' + PAGE_TITLE;
+    mark = !mark;
+  }, 800);
+}
+
+function stopTitleBlink() {
+  if (titleBlinkTimer) {
+    clearInterval(titleBlinkTimer);
+    titleBlinkTimer = null;
+  }
+  document.title = PAGE_TITLE;
 }
 
 function bindQuickCommands() {

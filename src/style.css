@@ -542,6 +542,7 @@ body {
   flex-direction: column;
   background: var(--toolbar-bg);
   border-left: 1px solid var(--toolbar-border);
+  position: relative;
 }
 
 .cmd-panel {
@@ -620,6 +621,37 @@ body {
   background: #fee500;
   color: #191919;
   border-top-right-radius: 4px;
+}
+
+.chat-text.chat-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.chat-file-name {
+  word-break: break-all;
+}
+
+.chat-file-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+  align-self: flex-start;
+}
+
+.chat-panel.chat-drop-over::after {
+  content: '로그 파일을 놓으세요';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 28, 30, 0.88);
+  color: #ffe08a;
+  font-size: 13px;
+  pointer-events: none;
 }
 
 .cmd-panel .chat-row-other .chat-text {
@@ -814,7 +846,7 @@ body {
     border-bottom: 0;
   }
 
-  .guest-app > .toolbar:not(.toolbar-commands) {
+  .guest-app > .toolbar:not(.toolbar-commands):not(.aging-hit-bar) {
     order: 1;
   }
 
@@ -823,7 +855,11 @@ body {
     order: 2;
   }
 
-  .guest-app .workspace {
+  .guest-app .aging-hit-bar {
     order: 3;
+  }
+
+  .guest-app .workspace {
+    order: 4;
   }
 }

@@ -33,8 +33,12 @@
       this.onReady = null;
       this.onOpen = null;
       this.onPerm = null;
+      this.onAging = null;
+      this.onFile = null;
       this.canCmd = false;
       this.lastGuests = [];
+      this.lastAging = {};
+      this.lastFiles = [];
     }
 
     get isHost() {
@@ -67,6 +71,8 @@
       this.rtcGuests = [];
       this.rtcHostConn = null;
       this.lastConsoles = '';
+      this.lastAging = {};
+      this.lastFiles = [];
       this.canCmd = false;
       this.lastGuests = [];
 
@@ -309,6 +315,14 @@
         this.onRename?.(msg.text || '', msg.slot || '1');
         return;
       }
+      if (type === 'aging') {
+        this.onAging?.(msg.name || '', msg.slot || '1', msg.text || '');
+        return;
+      }
+      if (type === 'file') {
+        this.onFile?.(msg.name || '', msg.text || '', msg.from || '');
+        return;
+      }
       if (type === 'closed') {
         this.connected = false;
         this.sid = '';
@@ -436,6 +450,47 @@
       this.send({ type: 'rename', slot: slot || '1', text: name });
     }
 
+    sendAging(kind, slot, text) {
+      if (!this.isHost) {
+        return;
+      }
+      this.send({
+        type: 'aging',
+        name: String(kind || 'hits'),
+        slot: slot || '1',
+        text: text || '',
+      });
+    }
+
+    sendFile(fileName, text) {
+      const name = sanitizeShareFileName(fileName);
+      const body = String(text || '');
+      if (!name || !body) {
+        return '빈 파일은 보낼 수 없습니다.';
+      }
+      if (utf8ByteLength(body) > MAX_SHARE_FILE_BYTES) {
+        return '파일이 너무 큽니다. 450KB 이하만 채팅으로 보낼 수 있습니다.';
+      }
+      this.send({ type: 'file', name, text: body });
+      return '';
+    }
+
+    rememberFile(payload) {
+      const item = {
+        type: 'file',
+        name: sanitizeShareFileName(payload?.name),
+        text: String(payload?.text || ''),
+        from: String(payload?.from || this.name || ''),
+      };
+      if (!item.name || !item.text) {
+        return;
+      }
+      this.lastFiles.push(item);
+      while (this.lastFiles.length > MAX_SHARE_FILES_KEEP) {
+        this.lastFiles.shift();
+      }
+    }
+
     send(payload) {
       if (!payload) {
         return;
@@ -443,16 +498,27 @@
       if (payload.type === 'consoles') {
         this.lastConsoles = payload.text || '';
       }
+      if (payload.type === 'aging' && payload.name === 'hits') {
+        this.lastAging[payload.slot || '1'] = {
+          type: 'aging',
+          name: 'hits',
+          slot: payload.slot || '1',
+          text: payload.text || '',
+        };
+      }
       if (this.transport === 'http') {
         this.sendHttp(payload);
         return;
       }
       if (this.transport === 'webrtc') {
-        if (!payload.from && (payload.type === 'chat' || payload.type === 'cmdlog')) {
+        if (!payload.from && (payload.type === 'chat' || payload.type === 'cmdlog' || payload.type === 'file')) {
           payload = Object.assign({}, payload, { from: this.name });
         }
+        if (payload.type === 'file') {
+          this.rememberFile(payload);
+        }
         this.sendRtc(payload);
-        if (this.isHost && (payload.type === 'chat' || payload.type === 'cmdlog')) {
+        if (this.isHost && (payload.type === 'chat' || payload.type === 'cmdlog' || payload.type === 'file')) {
           this.dispatchMessage(payload);
         }
         return;
@@ -682,6 +748,12 @@
       if (this.lastConsoles) {
         this.sendRtcTo(conn, { type: 'consoles', text: this.lastConsoles });
       }
+      for (const item of Object.keys(this.lastAging)) {
+        this.sendRtcTo(conn, this.lastAging[item]);
+      }
+      for (const item of this.lastFiles) {
+        this.sendRtcTo(conn, item);
+      }
       this.emitRtcPeers();
       return true;
     }
@@ -738,11 +810,14 @@
       if ((msg.type === 'cmd' || msg.type === 'keys' || msg.type === 'cmdlog') && guest && !guest.canCmd) {
         return;
       }
-      if (msg.type === 'allowcmd' || msg.type === 'perm' || msg.type === 'log' || msg.type === 'consoles') {
+      if (msg.type === 'allowcmd' || msg.type === 'perm' || msg.type === 'log' || msg.type === 'consoles' || msg.type === 'aging') {
         return;
       }
+      if (msg.type === 'file') {
+        this.rememberFile(msg);
+      }
       this.dispatchMessage(msg);
-      if (msg.type === 'chat' || msg.type === 'cmdlog' || msg.type === 'rename') {
+      if (msg.type === 'chat' || msg.type === 'cmdlog' || msg.type === 'rename' || msg.type === 'file') {
         this.sendRtc(msg);
       }
     }
@@ -1052,6 +1127,200 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
+  function appendChatFile(logEl, from, fileName, content, myName) {
+    if (!logEl) {
+      return;
+    }
+
+    const mine = Boolean(myName) && from === myName;
+    const row = document.createElement('div');
+    row.className = mine ? 'chat-row chat-row-mine' : 'chat-row chat-row-other';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'chat-from';
+    nameEl.textContent = mine ? '나' : from || '?';
+    bubble.appendChild(nameEl);
+
+    const body = document.createElement('p');
+    body.className = 'chat-text chat-file';
+
+    const label = document.createElement('span');
+    label.className = 'chat-file-name';
+    label.textContent = sanitizeShareFileName(fileName);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn chat-file-btn';
+    button.textContent = '다운로드';
+    button.addEventListener('click', () => {
+      downloadTextFile(fileName, content);
+    });
+
+    body.appendChild(label);
+    body.appendChild(button);
+    bubble.appendChild(body);
+    row.appendChild(bubble);
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function downloadTextFile(fileName, content) {
+    const blob = new Blob([String(content || '')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = sanitizeShareFileName(fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const MAX_SHARE_FILE_BYTES = 450000;
+  const MAX_SHARE_FILES_KEEP = 5;
+
+  function utf8ByteLength(text) {
+    return new Blob([String(text || '')]).size;
+  }
+
+  function sanitizeShareFileName(value) {
+    const raw = String(value || '').replace(/\\/g, '/');
+    const base = raw.split('/').pop() || '';
+    const clean = base.replace(/[<>:"|?*\u0000-\u001f]/g, '-').replace(/\s+/g, ' ').trim();
+    return clean.slice(0, 80) || 'aging-error.log';
+  }
+
+  function bindChatFileDrop(panel, onFile) {
+    if (!panel || typeof onFile !== 'function') {
+      return;
+    }
+
+    const hasFiles = (event) => {
+      const types = event.dataTransfer && event.dataTransfer.types;
+      return Boolean(types && types.indexOf && types.indexOf('Files') >= 0);
+    };
+
+    panel.addEventListener('dragenter', (event) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      panel.classList.add('chat-drop-over');
+    });
+    panel.addEventListener('dragover', (event) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      panel.classList.add('chat-drop-over');
+    });
+    panel.addEventListener('dragleave', (event) => {
+      if (event.target !== panel && !panel.contains(event.relatedTarget)) {
+        panel.classList.remove('chat-drop-over');
+      }
+      if (event.target === panel) {
+        panel.classList.remove('chat-drop-over');
+      }
+    });
+    panel.addEventListener('drop', (event) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      panel.classList.remove('chat-drop-over');
+      const files = event.dataTransfer && event.dataTransfer.files;
+      if (!files || !files.length) {
+        return;
+      }
+      readDroppedShareFiles(files, onFile);
+    });
+  }
+
+  function readDroppedShareFiles(files, onFile) {
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      if (!file) {
+        continue;
+      }
+      if (file.size > MAX_SHARE_FILE_BYTES) {
+        onFile(file.name, '', '파일이 너무 큽니다. 450KB 이하만 채팅으로 보낼 수 있습니다.');
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result || '');
+        if (!text.trim()) {
+          onFile(file.name, '', '빈 파일은 보낼 수 없습니다.');
+          return;
+        }
+        if (utf8ByteLength(text) > MAX_SHARE_FILE_BYTES) {
+          onFile(file.name, '', '파일이 너무 큽니다. 450KB 이하만 채팅으로 보낼 수 있습니다.');
+          return;
+        }
+        onFile(file.name, text, '');
+      };
+      reader.onerror = () => {
+        onFile(file.name, '', '파일을 읽지 못했습니다.');
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  function renderAgingHitList(box, list, options) {
+    if (!box) {
+      return;
+    }
+
+    box.replaceChildren();
+    const rows = Array.isArray(list) ? list : [];
+    const emptyText = options && options.emptyText
+      ? options.emptyText
+      : '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.';
+    const clearBtn = options && options.clearButton;
+
+    if (!rows.length) {
+      const empty = document.createElement('span');
+      empty.className = 'aging-hit-empty';
+      empty.textContent = emptyText;
+      box.appendChild(empty);
+      if (clearBtn) {
+        clearBtn.disabled = true;
+      }
+      return;
+    }
+
+    let anyHit = false;
+    for (const item of rows) {
+      const count = Number(item.count) || 0;
+      if (count > 0) {
+        anyHit = true;
+      }
+
+      const chip = document.createElement('span');
+      chip.className = 'aging-hit-item' + (count > 0 ? ' has-hit' : '');
+
+      const name = document.createElement('strong');
+      name.textContent = item.keyword;
+
+      const last = count > 0 && item.lastTime ? item.lastTime : '-';
+      const meta = document.createElement('span');
+      meta.textContent = count + '회 · 마지막 ' + last;
+
+      chip.title = item.keyword + '  ' + count + '회  마지막 ' + last;
+      chip.appendChild(name);
+      chip.appendChild(meta);
+      box.appendChild(chip);
+    }
+
+    if (clearBtn) {
+      clearBtn.disabled = !anyHit;
+    }
+  }
+
   function appendCmdLine(logEl, from, text, myName) {
     appendChatLine(logEl, from, text, myName, 'cmd');
   }
@@ -1171,6 +1440,9 @@
     makeRoomToken,
     roomFromLocation,
     appendChatLine,
+    appendChatFile,
+    bindChatFileDrop,
+    renderAgingHitList,
     appendCmdLine,
     TypedLineBuffer,
     encodeConsoles,
