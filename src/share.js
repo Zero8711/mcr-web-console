@@ -1428,11 +1428,18 @@
 
   /**
    * 연결.bat 주소는 로컬 TCP 중계.
-   * 그 외(GitHub Pages)는 브라우저 간 WebRTC 공유.
+   * 시험팀 탭은 127.0.0.1 이고, 개발팀은 같은 중계의 사내 IP:8765 로 들어온다.
+   * GitHub Pages 만 브라우저 간 WebRTC 를 쓴다.
    */
   function isLocalRelayOrigin() {
     const host = String(location.hostname || '').toLowerCase();
-    return host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+    if (host === '127.0.0.1' || host === 'localhost' || host === '[::1]') {
+      return true;
+    }
+    if (host.indexOf('github.io') >= 0) {
+      return false;
+    }
+    return String(location.port || '') === '8765';
   }
 
   global.ShareClient = ShareClient;
