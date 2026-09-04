@@ -909,7 +909,8 @@ async function startShare() {
     if (!ShareUtil.isLocalRelayOrigin()) {
       pane?.term.writeln('\x1b[33m[공유] 이 주소만 보내면 됩니다. 이 탭을 닫으면 끊깁니다. 회사망이 P2P 를 막으면 접속이 실패할 수 있습니다.\x1b[0m');
     } else if (info?.wan) {
-      pane?.term.writeln('\x1b[33m[공유] UPnP 로 공유기 TCP 8765 를 열었습니다. 맨 위 링크를 쓰세요. 안 열리면 공유기 UPnP 또는 수동 포워드를 확인하세요.\x1b[0m');
+      pane?.term.writeln('\x1b[33m[공유] UPnP 맨 위 링크는 공유기 밖(다른 자리 사내망) PC 용입니다.\x1b[0m');
+      pane?.term.writeln('\x1b[33m       같은 공유기 Wi-Fi/유선에 있는 PC 는 노트북 IP(192.168.…) 링크를 쓰세요. UPnP 주소는 안에서 안 열리는 경우가 많습니다.\x1b[0m');
     } else if (readWanBase(info?.port)) {
       pane?.term.writeln('\x1b[33m[공유] 공유기 사내 IP 링크를 맨 위에 넣었습니다. ipTIME 에서 TCP 8765 를 이 노트북으로 포트포워드 하세요.\x1b[0m');
     } else {

@@ -76,17 +76,45 @@
       this.canCmd = false;
       this.lastGuests = [];
 
-      if (!isLocalRelayOrigin()) {
+      if (isGithubPagesOrigin()) {
         this.connectWebRtc();
         return;
       }
 
-      if (this.role === 'guest') {
-        this.connectHttp();
+      if (isLoopbackOrigin()) {
+        if (this.role === 'guest') {
+          this.connectHttp();
+        } else {
+          this.connectWs();
+        }
         return;
       }
 
-      this.connectWs();
+      this.connectPreferringLocalRelay();
+    }
+
+    async connectPreferringLocalRelay() {
+      try {
+        const res = await fetch('/api/info', { cache: 'no-store' });
+        if (this.intentionalClose) {
+          return;
+        }
+        if (res.ok) {
+          if (this.role === 'guest') {
+            await this.connectHttp();
+          } else {
+            this.connectWs();
+          }
+          return;
+        }
+      } catch {
+        // 정적 호스팅이면 WebRTC 로 붙는다
+      }
+
+      if (this.intentionalClose || this.failed) {
+        return;
+      }
+      this.connectWebRtc();
     }
 
     connectWs() {
@@ -1428,15 +1456,24 @@
 
   /**
    * 연결.bat 주소는 로컬 TCP 중계.
-   * 시험팀 탭은 127.0.0.1 이고, 개발팀은 같은 중계의 사내 IP:8765 로 들어온다.
+   * 시험팀 탭은 127.0.0.1, 개발팀은 사내 IP 또는 UPnP WAN:8765 로 들어온다.
    * GitHub Pages 만 브라우저 간 WebRTC 를 쓴다.
+   * 포트가 비어 보이는 경우에도 /api/info 가 있으면 중계로 붙인다.
    */
-  function isLocalRelayOrigin() {
+  function isGithubPagesOrigin() {
+    return String(location.hostname || '').toLowerCase().indexOf('github.io') >= 0;
+  }
+
+  function isLoopbackOrigin() {
     const host = String(location.hostname || '').toLowerCase();
-    if (host === '127.0.0.1' || host === 'localhost' || host === '[::1]') {
+    return host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+  }
+
+  function isLocalRelayOrigin() {
+    if (isLoopbackOrigin()) {
       return true;
     }
-    if (host.indexOf('github.io') >= 0) {
+    if (isGithubPagesOrigin()) {
       return false;
     }
     return String(location.port || '') === '8765';
