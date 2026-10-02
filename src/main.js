@@ -1145,11 +1145,7 @@ function echoLocal(pane, payload) {
   if (!target) {
     return;
   }
-  const visible = payload
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/\n/g, '\r\n');
-  target.term.write(visible);
+  target.logView.writeIncoming(payload);
 }
 
 function isUserCancel(err) {

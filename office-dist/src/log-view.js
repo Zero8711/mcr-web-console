@@ -129,8 +129,8 @@
 
     /**
      * 장비에서 온 텍스트를 줄 단위로 색을 입혀 출력한다.
-     * Tera Term 과 같이 \r 은 같은 줄을 덮고, \n 이 와야 다음 줄로 간다.
-     * UBI/mdev 진행 로그는 \r 만 반복하므로, \n 기준으로 자르면 빈 줄과 찌꺼기가 생긴다.
+     * Tera Term 과 같이 \r\n / \n 은 다음 줄, 줄 가운데 \r 만 덮어쓰기이다.
+     * USB 는 \r 과 \n 을 따로 보내는 경우가 많아서, 끝의 \r 은 다음 글자를 보고 처리한다.
      */
     writeIncoming(text) {
       if (!text) {
@@ -161,40 +161,39 @@
           continue;
         }
 
+        if (crAt === this.lineBuf.length - 1) {
+          break;
+        }
+
         this.lineBuf = this.lineBuf.slice(crAt + 1);
         output += this.erasePaintedPartial();
       }
 
-      output += this.paintPending(this.lineBuf);
+      const pending = this.lineBuf.endsWith('\r')
+        ? this.lineBuf.slice(0, -1)
+        : this.lineBuf;
+      output += this.paintPending(pending);
 
       if (output) {
         this.term.write(output);
       }
     }
 
+    /**
+     * 이미 화면에 있는 줄은 다시 그리지 않고, 남은 글자만 이어서 쓴 뒤 개행한다.
+     */
     finishLine(rawLine) {
-      let output = this.erasePaintedPartial();
-      output += colorizeLine(rawLine) + '\r\n';
-      return output;
+      const output = this.paintPending(rawLine);
+      this.partialShown = 0;
+      return output + '\r\n';
     }
 
-    /**
-     * 이미 그려 둔 미완성 줄을 지운다.
-     * 칸이 좁아 줄이 접혀 있으면 \r 만으로는 윗줄 찌꺼기가 남는다.
-     */
     erasePaintedPartial() {
       if (this.partialShown <= 0) {
         return '';
       }
-
-      const cols = this.term.cols || 80;
-      const rows = Math.max(1, Math.ceil(this.partialShown / cols));
-      let output = '\r\x1b[2K';
-      for (let i = 1; i < rows; i++) {
-        output += '\x1b[A\r\x1b[2K';
-      }
       this.partialShown = 0;
-      return output;
+      return '\r\x1b[2K';
     }
 
     paintPending(pending) {
