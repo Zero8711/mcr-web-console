@@ -128,51 +128,38 @@
     }
 
     /**
-     * 장비에서 온 텍스트를 줄 단위로 색을 입혀 출력한다.
-     * Tera Term 과 같이 \r\n / \n 은 다음 줄, 줄 가운데 \r 만 덮어쓰기이다.
-     * USB 는 \r 과 \n 을 따로 보내는 경우가 많아서, 끝의 \r 은 다음 글자를 보고 처리한다.
+     * Tera Term CRReceive=LF 와 같게 받는다.
+     * \n 만 다음 줄(CR+LF)로 바꾸고, \r 은 그 줄 맨 앞(덮어쓰기)만 한다.
+     * \r 을 개행으로 보면 엔터·부팅 로그에 빈 줄이 생긴다.
      */
     writeIncoming(text) {
       if (!text) {
         return;
       }
 
-      this.lineBuf += text;
       let output = '';
 
-      while (true) {
-        const crAt = this.lineBuf.indexOf('\r');
-        const lfAt = this.lineBuf.indexOf('\n');
-        if (crAt < 0 && lfAt < 0) {
-          break;
-        }
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
 
-        if (lfAt >= 0 && (crAt < 0 || lfAt < crAt)) {
-          const rawLine = this.lineBuf.slice(0, lfAt);
-          this.lineBuf = this.lineBuf.slice(lfAt + 1);
-          output += this.finishLine(rawLine);
+        if (ch === '\n') {
+          output += this.finishLine(this.lineBuf);
+          this.lineBuf = '';
           continue;
         }
 
-        if (crAt >= 0 && lfAt === crAt + 1) {
-          const rawLine = this.lineBuf.slice(0, crAt);
-          this.lineBuf = this.lineBuf.slice(lfAt + 1);
-          output += this.finishLine(rawLine);
+        if (ch === '\r') {
+          output += this.paintPending(this.lineBuf);
+          output += '\r';
+          this.lineBuf = '';
+          this.partialShown = 0;
           continue;
         }
 
-        if (crAt === this.lineBuf.length - 1) {
-          break;
-        }
-
-        this.lineBuf = this.lineBuf.slice(crAt + 1);
-        output += this.erasePaintedPartial();
+        this.lineBuf += ch;
       }
 
-      const pending = this.lineBuf.endsWith('\r')
-        ? this.lineBuf.slice(0, -1)
-        : this.lineBuf;
-      output += this.paintPending(pending);
+      output += this.paintPending(this.lineBuf);
 
       if (output) {
         this.term.write(output);
