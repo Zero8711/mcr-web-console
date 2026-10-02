@@ -42,6 +42,12 @@ flowchart LR
 
 ## 시험팀
 
+### 사내 배포
+
+시험팀 PC에는 저장소 전체가 아니라 **`office-dist` 폴더만** 통째로 복사하면 됩니다. `mcr_console.bat` 만 빼서 주면 실행되지 않습니다. 개발팀 PC에는 이 폴더가 필요 없습니다.
+
+소스나 화면을 바꾼 뒤에는 `pack-office.bat` 을 실행해 `office-dist` 를 다시 채웁니다.
+
 ### 사내 (`mcr_console.bat`)
 
 1. `mcr_console.bat` 을 실행합니다. **검은 창은 닫지 마세요.**
@@ -117,4 +123,5 @@ Custom domain / CNAME 은 넣지 마세요.
 
 - 저장소를 Private 로 바꾸면 무료 계정에서는 Pages 가 내려갑니다. 다시 Public 으로 해도 Settings → Pages 에서 `main` / `/ (root)` 를 다시 켜야 합니다.
 - 사내 IIS 에 `index.html`, `join.html`, `src/`, `vendor/` 만 올리면 COM 화면은 됩니다. 공유는 여전히 `mcr_console.bat` 입니다.
+- 사내 배포는 `office-dist` 폴더를 통째로 복사합니다. 내용은 `pack-office.bat` 으로 다시 만듭니다.
 - `mcr_console.bat` 의 C# 을 바꾼 뒤에는 창을 닫고 다시 실행하세요.
