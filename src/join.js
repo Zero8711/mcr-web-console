@@ -362,6 +362,9 @@ function connectShare() {
     els.name.value = shareClient.name;
     setStatus(true, shareClient.name + ' · 공유 접속됨');
     ShareUtil.clearStoredPassFails(room);
+    for (const pane of panes) {
+      pane.markOpened();
+    }
     writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 콘솔 보기와 채팅은 바로 됩니다.', 'green');
     if (!shareClient.canCmd) {
       writeGuide('[공유] 장비 명령은 시험팀이 허용하면 이 화면에 열립니다.');
@@ -383,6 +386,7 @@ function connectShare() {
     if (!pane) {
       return;
     }
+    pane.markOpened();
     pane.writeIncoming(text);
   };
 
@@ -391,6 +395,7 @@ function connectShare() {
     if (!pane) {
       return;
     }
+    pane.markOpened();
     pane.writeIncoming(text);
     for (const pane of panes) {
       pane.fit();
@@ -474,6 +479,7 @@ function connectShare() {
 function renderGuestAgingHits(slot) {
   const list = agingHitsBySlot[String(slot || currentPane()?.id || '1')] || [];
   ShareUtil.renderAgingHitList(els.agingHitList, list, {
+    hitsOnly: true,
     emptyText: '시험팀이 감시를 켜면 여기에 횟수가 보입니다.',
   });
 }

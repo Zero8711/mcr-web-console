@@ -1304,13 +1304,23 @@
     }
 
     box.replaceChildren();
-    const rows = Array.isArray(list) ? list : [];
     const emptyText = options && options.emptyText
       ? options.emptyText
       : '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.';
     const clearBtn = options && options.clearButton;
+    const hitsOnly = Boolean(options && options.hitsOnly);
+    const rows = (Array.isArray(list) ? list : []).filter((item) => {
+      if (!hitsOnly) {
+        return true;
+      }
+      return (Number(item.count) || 0) > 0;
+    });
+    const bar = box.closest('.aging-hit-bar');
 
     if (!rows.length) {
+      if (bar) {
+        bar.classList.add('is-quiet');
+      }
       const empty = document.createElement('span');
       empty.className = 'aging-hit-empty';
       empty.textContent = emptyText;
@@ -1342,6 +1352,10 @@
       chip.appendChild(name);
       chip.appendChild(meta);
       box.appendChild(chip);
+    }
+
+    if (bar) {
+      bar.classList.toggle('is-quiet', !anyHit);
     }
 
     if (clearBtn) {

@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔 · 원격</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261030c" />
+    <link rel="stylesheet" href="./src/style.css?v=20261030e" />
   </head>
   <body>
     <div id="app" class="guest-app guest-readonly">
+      <header class="app-header">
+        <div class="app-brand">
+          <h1>웹 시리얼 콘솔</h1>
+          <p>원격 · 시험팀이 연 화면을 봅니다</p>
+        </div>
+      </header>
+
+      <div class="app-chrome">
       <header class="toolbar toolbar-join">
         <span class="toolbar-label">접속</span>
         <div class="toolbar-group">
@@ -51,6 +59,20 @@
         </div>
       </header>
 
+      <p id="browser-warning" class="browser-warning" hidden></p>
+      <p class="share-banner">
+        같은 링크로 여러 명이 들어올 수 있습니다. 이름과 비밀번호를 적은 뒤 [접속] 을 누르세요.
+        처음에는 콘솔 보기와 채팅만 됩니다. 장비 명령은 시험팀이 허용하면 열립니다.
+      </p>
+
+      <div id="aging-hit-bar" class="toolbar aging-hit-bar">
+        <div class="aging-hit-heading">이상로그 발생</div>
+        <div id="aging-hit-list" class="aging-hit-list">
+          <span class="aging-hit-empty">시험팀이 감시를 켜면 여기에 횟수가 보입니다.</span>
+        </div>
+      </div>
+      </div>
+
       <header class="toolbar toolbar-commands">
         <span class="toolbar-label">명령</span>
         <div id="quick-commands" class="toolbar-group command-buttons"></div>
@@ -78,24 +100,15 @@
         </div>
       </header>
 
-      <p id="browser-warning" class="browser-warning" hidden></p>
-      <p class="share-banner">
-        같은 링크로 여러 명이 들어올 수 있습니다. 이름과 비밀번호를 적은 뒤 [접속] 을 누르세요.
-        처음에는 콘솔 보기와 채팅만 됩니다. 장비 명령은 시험팀이 허용하면 열립니다.
-      </p>
-
-      <div id="aging-hit-bar" class="toolbar aging-hit-bar">
-        <div class="aging-hit-heading">이상로그 발생</div>
-        <div id="aging-hit-list" class="aging-hit-list">
-          <span class="aging-hit-empty">시험팀이 감시를 켜면 여기에 횟수가 보입니다.</span>
-        </div>
-      </div>
-
       <div class="workspace">
         <div id="console-stack" class="console-stack"></div>
         <aside id="chat-panel" class="chat-panel">
           <div class="chat-header">채팅 · 로그 파일 놓기</div>
           <div id="chat-log" class="chat-log"></div>
+          <div class="side-empty">
+            <p class="side-empty-title">채팅</p>
+            <p class="side-empty-live">접속하면 시험팀과 여기서 대화합니다.</p>
+          </div>
           <form id="chat-form" class="chat-form">
             <input
               id="txt-chat"
@@ -109,6 +122,10 @@
         <aside id="cmd-panel" class="chat-panel cmd-panel">
           <div class="chat-header" id="cmd-header">명령 기록</div>
           <div id="cmd-log" class="chat-log"></div>
+          <div class="side-empty">
+            <p class="side-empty-title">명령 기록</p>
+            <p class="side-empty-live">보낸 명령이 있으면 여기에 남습니다.</p>
+          </div>
           <form id="cmd-form" class="chat-form">
             <input
               id="txt-panel-cmd"
@@ -139,10 +156,10 @@
     <script src="./src/commands.js?v=20261002d"></script>
     <script src="./src/log-view.js?v=20261002c"></script>
     <script src="./vendor/peerjs.min.js"></script>
-    <script src="./src/share.js?v=20260904f"></script>
+    <script src="./src/share.js?v=20261030e"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
-    <script src="./src/console-pane.js?v=20261030a"></script>
-    <script src="./src/join.js?v=20261030a"></script>
+    <script src="./src/console-pane.js?v=20261030e"></script>
+    <script src="./src/join.js?v=20261030e"></script>
   </body>
 </html>

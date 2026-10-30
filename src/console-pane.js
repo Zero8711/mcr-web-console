@@ -89,9 +89,27 @@
       this.bar.appendChild(this.logStopBtn);
       this.root.appendChild(this.bar);
 
+      this.body = document.createElement('div');
+      this.body.className = 'console-body';
+
       this.termEl = document.createElement('div');
       this.termEl.className = 'terminal';
-      this.root.appendChild(this.termEl);
+      this.body.appendChild(this.termEl);
+
+      this.everOpened = false;
+      this.emptyEl = document.createElement('div');
+      this.emptyEl.className = 'console-empty';
+      if (this.mode === 'host') {
+        this.emptyEl.innerHTML =
+          '<p class="console-empty-title">이 칸은 아직 비어 있습니다</p>' +
+          '<p class="console-empty-text">위쪽 [연결] 로 장비 COM 을 고르세요.<br>장비가 여러 대면 [콘솔 추가] 로 칸을 늘립니다.</p>';
+      } else {
+        this.emptyEl.innerHTML =
+          '<p class="console-empty-title">시험팀 화면을 기다리는 중</p>' +
+          '<p class="console-empty-text">이름과 비밀번호를 넣고 [접속] 하세요.</p>';
+      }
+      this.body.appendChild(this.emptyEl);
+      this.root.appendChild(this.body);
 
       options.container.appendChild(this.root);
 
@@ -101,9 +119,10 @@
       this.term.open(this.termEl);
       this.logView = new TerminalLogView(this.term);
       this.find = new ConsoleFind(this.term);
-      this.root.insertBefore(this.find.root, this.termEl);
+      this.root.insertBefore(this.find.root, this.body);
 
       this.bind();
+      this.syncEmpty();
       this.fit();
     }
 
@@ -207,6 +226,18 @@
 
     setStatus(text) {
       this.statusEl.textContent = text || '';
+    }
+
+    markOpened() {
+      this.everOpened = true;
+      this.syncEmpty();
+    }
+
+    syncEmpty() {
+      if (!this.emptyEl) {
+        return;
+      }
+      this.emptyEl.hidden = this.everOpened;
     }
 
     writeIncoming(text) {
@@ -457,6 +488,7 @@
       await this.agingLog.resetSession();
       await this.serial.open(port, this.hooks.getSerialOptions());
       this.setStatus(this.portLabel());
+      this.markOpened();
       this.term.writeln('');
       this.term.writeln(`\x1b[32m[연결됨] ${this.portLabel()}\x1b[0m`);
       if (this.agingLog.enabled && this.agingLog.hasSaveTarget()) {
@@ -489,6 +521,7 @@
       await this.serial.close();
       await this.serial.open(port, this.hooks.getSerialOptions());
       this.setStatus(this.portLabel());
+      this.markOpened();
       this.term.writeln('');
       this.term.writeln(`\x1b[32m[설정 변경 후 재연결] ${this.portLabel()}\x1b[0m`);
       this.hooks.onOpenChange?.(this);

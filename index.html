@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261030c" />
+    <link rel="stylesheet" href="./src/style.css?v=20261030e" />
   </head>
   <body>
     <div id="app">
+      <header class="app-header">
+        <div class="app-brand">
+          <h1>웹 시리얼 콘솔</h1>
+          <p>시험팀 · COM 은 이 PC 에만 붙습니다</p>
+        </div>
+      </header>
+
+      <div class="app-chrome">
       <header class="toolbar toolbar-serial">
         <span class="toolbar-label">연결</span>
         <div class="toolbar-group">
@@ -216,25 +224,37 @@
           <span class="share-guest-empty">아직 입장한 사람이 없습니다.</span>
         </div>
       </header>
+      </div>
 
       <div class="workspace">
         <div id="console-stack" class="console-stack"></div>
-        <aside id="chat-panel" class="chat-panel" hidden>
+        <aside id="chat-panel" class="chat-panel idle">
           <div class="chat-header">채팅 · 로그 파일 놓기</div>
           <div id="chat-log" class="chat-log"></div>
+          <div class="side-empty" id="chat-empty">
+            <p class="side-empty-title">채팅</p>
+            <p class="side-empty-idle">공유를 시작하면 개발팀과 여기서 대화합니다. 로그 파일도 이 창에 놓을 수 있습니다.</p>
+            <p class="side-empty-live">아직 대화가 없습니다.</p>
+          </div>
           <form id="chat-form" class="chat-form">
             <input
               id="txt-chat"
               type="text"
               spellcheck="false"
-              placeholder="대화 입력 · 로그 파일은 창에 놓기"
+              placeholder="공유를 시작하면 대화할 수 있습니다"
+              disabled
             />
-            <button type="submit" class="btn">보내기</button>
+            <button type="submit" class="btn" disabled>보내기</button>
           </form>
         </aside>
-        <aside id="cmd-panel" class="chat-panel cmd-panel" hidden>
+        <aside id="cmd-panel" class="chat-panel cmd-panel idle">
           <div class="chat-header">명령 기록</div>
           <div id="cmd-log" class="chat-log"></div>
+          <div class="side-empty" id="cmd-empty">
+            <p class="side-empty-title">명령 기록</p>
+            <p class="side-empty-idle">공유가 켜지면 누가 어떤 명령을 보냈는지 여기에 남습니다.</p>
+            <p class="side-empty-live">아직 보낸 명령이 없습니다.</p>
+          </div>
           <form id="cmd-form" class="chat-form">
             <input
               id="txt-panel-cmd"
@@ -267,10 +287,10 @@
     <script src="./src/commands.js?v=20261002d"></script>
     <script src="./src/log-view.js?v=20261002c"></script>
     <script src="./vendor/peerjs.min.js"></script>
-    <script src="./src/share.js?v=20260904f"></script>
+    <script src="./src/share.js?v=20261030e"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
-    <script src="./src/console-pane.js?v=20261030a"></script>
-    <script src="./src/main.js?v=20261030a"></script>
+    <script src="./src/console-pane.js?v=20261030e"></script>
+    <script src="./src/main.js?v=20261030e"></script>
   </body>
 </html>

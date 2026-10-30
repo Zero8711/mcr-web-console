@@ -47,6 +47,7 @@ const els = {
   chatLog: document.getElementById('chat-log'),
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('txt-chat'),
+  chatSend: document.querySelector('#chat-form button[type="submit"]'),
   cmdPanel: document.getElementById('cmd-panel'),
   cmdLog: document.getElementById('cmd-log'),
   cmdForm: document.getElementById('cmd-form'),
@@ -275,7 +276,8 @@ function applyAgingState(state) {
 function renderAgingHits(list) {
   ShareUtil.renderAgingHitList(els.agingHitList, list, {
     clearButton: els.agingHitClear,
-    emptyText: '키워드를 입력하면 발견 횟수가 여기에 쌓입니다.',
+    hitsOnly: true,
+    emptyText: '아직 감지된 이상로그가 없습니다. 키워드가 나오면 여기에 횟수가 쌓입니다.',
   });
 }
 
@@ -337,6 +339,7 @@ if (serialBlockReason) {
 }
 
 addPane('장비 1');
+setShareSideLive(false);
 if (serialBlockReason) {
   currentPane()?.term.writeln(serialBlockReason);
 }
@@ -938,10 +941,9 @@ async function startShare() {
     els.shareGuestBar.hidden = false;
   }
   renderShareGuests({ guests: [] });
-  els.chatPanel.hidden = false;
-  els.cmdPanel.hidden = false;
   els.chatLog.textContent = '';
   els.cmdLog.textContent = '';
+  setShareSideLive(true);
 
   shareClient = new ShareClient({
     role: 'host',
@@ -1048,6 +1050,21 @@ async function startShare() {
   setButtonState(currentPane()?.isOpen);
 }
 
+function setShareSideLive(on) {
+  const live = Boolean(on);
+  els.chatPanel?.classList.toggle('idle', !live);
+  els.cmdPanel?.classList.toggle('idle', !live);
+  if (els.chatInput) {
+    els.chatInput.disabled = !live;
+    els.chatInput.placeholder = live
+      ? '대화 입력 · 로그 파일은 창에 놓기'
+      : '공유를 시작하면 대화할 수 있습니다';
+  }
+  if (els.chatSend) {
+    els.chatSend.disabled = !live;
+  }
+}
+
 function stopShare(message) {
   const client = shareClient;
   shareClient = null;
@@ -1059,8 +1076,7 @@ function stopShare(message) {
     els.shareGuestBar.hidden = true;
   }
   renderShareGuests({ guests: [] });
-  els.chatPanel.hidden = true;
-  els.cmdPanel.hidden = true;
+  setShareSideLive(false);
   els.sharePeers.textContent = '접속 0명';
   setButtonState(currentPane()?.isOpen);
 
