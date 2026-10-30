@@ -27,6 +27,9 @@ const els = {
   quickCommands: document.getElementById('quick-commands'),
   customCommand: document.getElementById('txt-custom-command'),
   sendCommand: document.getElementById('btn-send-command'),
+  addCommand: document.getElementById('btn-add-command'),
+  editCommands: document.getElementById('btn-edit-commands'),
+  resetCommands: document.getElementById('btn-reset-commands'),
   shareStart: document.getElementById('btn-share-start'),
   shareStop: document.getElementById('btn-share-stop'),
   shareCopy: document.getElementById('btn-share-copy'),
@@ -65,6 +68,7 @@ let nextPaneId = 1;
 let titleBlinkTimer = null;
 let shareClient = null;
 let shareUrl = '';
+let commandEditing = false;
 const SHARE_WAN_KEY = 'share-wan-host';
 const SHARE_NAME_KEY = 'share-host-name';
 
@@ -750,7 +754,6 @@ function setButtonState(connected) {
   els.connect.disabled = connected || Boolean(getSerialBlockReason());
   els.disconnect.disabled = !connected;
   els.sendCommand.disabled = !connected;
-  els.customCommand.disabled = !connected;
   if (els.panelCmd) {
     els.panelCmd.disabled = !connected;
   }
@@ -778,24 +781,57 @@ function setButtonState(connected) {
     els.removeConsole.disabled = panes.length <= 1 || Boolean(currentPane()?.isOpen);
   }
 
-  const commandButtons = els.quickCommands.querySelectorAll('button');
-  for (const button of commandButtons) {
-    button.disabled = !connected;
+  refreshQuickCommands();
+}
+
+function refreshQuickCommands() {
+  QuickCommands.render(els.quickCommands, {
+    sendEnabled: Boolean(currentPane()?.isOpen),
+    editing: commandEditing,
+    onSend: sendConsoleCommand,
+    onRemove: (command) => {
+      QuickCommands.remove(command);
+      refreshQuickCommands();
+    },
+  });
+
+  if (els.editCommands) {
+    els.editCommands.textContent = commandEditing ? '편집 끝' : '편집';
+  }
+  if (els.resetCommands) {
+    els.resetCommands.hidden = !commandEditing;
   }
 }
 
-function bindQuickCommands() {
-  for (const item of QUICK_COMMANDS) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn btn-cmd';
-    button.textContent = item.label;
-    button.disabled = true;
-    button.addEventListener('click', () => {
-      sendConsoleCommand(item.command);
-    });
-    els.quickCommands.appendChild(button);
+function addQuickCommandFromInput() {
+  const result = QuickCommands.add(els.customCommand?.value);
+  if (result.error) {
+    currentPane()?.term.writeln('\x1b[33m[안내] ' + result.error + '\x1b[0m');
+    return;
   }
+  if (els.customCommand) {
+    els.customCommand.value = '';
+  }
+  refreshQuickCommands();
+}
+
+function bindQuickCommands() {
+  if (els.customCommand) {
+    els.customCommand.disabled = false;
+  }
+  refreshQuickCommands();
+
+  els.addCommand?.addEventListener('click', () => {
+    addQuickCommandFromInput();
+  });
+  els.editCommands?.addEventListener('click', () => {
+    commandEditing = !commandEditing;
+    refreshQuickCommands();
+  });
+  els.resetCommands?.addEventListener('click', () => {
+    QuickCommands.reset();
+    refreshQuickCommands();
+  });
 }
 
 /**

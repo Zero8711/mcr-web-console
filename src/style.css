@@ -284,12 +284,27 @@ body {
 
 .command-buttons {
   flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cmd-item {
+  display: inline-flex;
+  align-items: stretch;
 }
 
 .command-buttons .btn-cmd {
   padding: 4px 8px;
   font-size: 12px;
   font-family: Consolas, "Courier New", monospace;
+}
+
+.command-buttons .btn-cmd-remove {
+  padding: 0 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .command-custom {

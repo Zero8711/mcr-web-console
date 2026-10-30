@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔 · 원격</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20260904b" />
+    <link rel="stylesheet" href="./src/style.css?v=20261002d" />
   </head>
   <body>
     <div id="app" class="guest-app guest-readonly">
@@ -64,6 +64,15 @@
             />
           </label>
           <button id="btn-send-command" type="button" class="btn" disabled>보내기</button>
+          <button id="btn-add-command" type="button" class="btn" title="입력한 명령을 버튼으로 남깁니다.">
+            버튼 추가
+          </button>
+          <button id="btn-edit-commands" type="button" class="btn" title="버튼을 지우거나 기본값으로 돌립니다.">
+            편집
+          </button>
+          <button id="btn-reset-commands" type="button" class="btn" hidden title="처음 들어 있던 버튼으로 되돌립니다.">
+            기본값
+          </button>
         </div>
       </header>
 
@@ -125,13 +134,13 @@
 
     <script src="./vendor/xterm.js"></script>
     <script src="./vendor/addon-fit.js"></script>
-    <script src="./src/commands.js"></script>
+    <script src="./src/commands.js?v=20261002d"></script>
     <script src="./src/log-view.js?v=20261002c"></script>
     <script src="./vendor/peerjs.min.js"></script>
     <script src="./src/share.js?v=20260904f"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20260901o"></script>
     <script src="./src/console-pane.js?v=20261002a"></script>
-    <script src="./src/join.js?v=20260904b"></script>
+    <script src="./src/join.js?v=20261002d"></script>
   </body>
 </html>

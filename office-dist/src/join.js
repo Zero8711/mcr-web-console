@@ -20,6 +20,9 @@ const els = {
   quickCommands: document.getElementById('quick-commands'),
   customCommand: document.getElementById('txt-custom-command'),
   sendCommand: document.getElementById('btn-send-command'),
+  addCommand: document.getElementById('btn-add-command'),
+  editCommands: document.getElementById('btn-edit-commands'),
+  resetCommands: document.getElementById('btn-reset-commands'),
   chatLog: document.getElementById('chat-log'),
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('txt-chat'),
@@ -46,6 +49,7 @@ let shareClient = null;
 let joined = false;
 let joining = false;
 let canCmd = false;
+let commandEditing = false;
 let passLockTimer = null;
 let titleBlinkTimer = null;
 const agingHitsBySlot = {};
@@ -551,18 +555,51 @@ function stopTitleBlink() {
   document.title = PAGE_TITLE;
 }
 
-function bindQuickCommands() {
-  for (const item of QUICK_COMMANDS) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn btn-cmd';
-    button.textContent = item.label;
-    button.disabled = true;
-    button.addEventListener('click', () => {
-      sendConsoleCommand(item.command);
-    });
-    els.quickCommands.appendChild(button);
+function refreshQuickCommands() {
+  QuickCommands.render(els.quickCommands, {
+    sendEnabled: joined && canCmd,
+    editing: commandEditing,
+    onSend: sendConsoleCommand,
+    onRemove: (command) => {
+      QuickCommands.remove(command);
+      refreshQuickCommands();
+    },
+  });
+
+  if (els.editCommands) {
+    els.editCommands.textContent = commandEditing ? '편집 끝' : '편집';
   }
+  if (els.resetCommands) {
+    els.resetCommands.hidden = !commandEditing;
+  }
+}
+
+function addQuickCommandFromInput() {
+  const result = QuickCommands.add(els.customCommand?.value);
+  if (result.error) {
+    writeGuide('[안내] ' + result.error);
+    return;
+  }
+  if (els.customCommand) {
+    els.customCommand.value = '';
+  }
+  refreshQuickCommands();
+}
+
+function bindQuickCommands() {
+  refreshQuickCommands();
+
+  els.addCommand?.addEventListener('click', () => {
+    addQuickCommandFromInput();
+  });
+  els.editCommands?.addEventListener('click', () => {
+    commandEditing = !commandEditing;
+    refreshQuickCommands();
+  });
+  els.resetCommands?.addEventListener('click', () => {
+    QuickCommands.reset();
+    refreshQuickCommands();
+  });
 }
 
 function sendConsoleCommand(command) {
@@ -611,10 +648,7 @@ function setCommandEnabled(enabled) {
   if (els.panelCmdSend) {
     els.panelCmdSend.disabled = !enabled;
   }
-  const commandButtons = els.quickCommands.querySelectorAll('button');
-  for (const button of commandButtons) {
-    button.disabled = !enabled;
-  }
+  refreshQuickCommands();
 }
 
 function applyGuestPerm(allowed) {
