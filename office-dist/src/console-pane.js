@@ -3,6 +3,16 @@
  * 시험팀은 serial 을 열고, 개발팀은 로그만 받는다.
  */
 (function (global) {
+  const HANGUL =
+    /[\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7FF\uFFA0-\uFFDC]/g;
+
+  /**
+   * 장비 콘솔은 ASCII 명령만 보낸다. 채팅은 이 함수를 쓰지 않는다.
+   */
+  function stripHangulForConsole(text) {
+    return String(text || '').replace(HANGUL, '');
+  }
+
   const TERM_OPTIONS = {
     cursorBlink: true,
     fontFamily: 'Consolas, "Courier New", monospace',
@@ -325,7 +335,11 @@
       if (this.mode === 'guest') {
         this.term.options.disableStdin = true;
         this.term.onData((data) => {
-          this.hooks.onGuestKeys?.(this, data);
+          const text = stripHangulForConsole(data);
+          if (!text) {
+            return;
+          }
+          this.hooks.onGuestKeys?.(this, text);
         });
         return;
       }
@@ -349,8 +363,12 @@
         if (!this.isOpen) {
           return;
         }
-        this.writeRaw(data);
-        this.collectTyped(data);
+        const text = stripHangulForConsole(data);
+        if (!text) {
+          return;
+        }
+        this.writeRaw(text);
+        this.collectTyped(text);
       });
 
       this.bindAging();
@@ -391,8 +409,12 @@
     }
 
     writeRaw(data) {
+      const text = stripHangulForConsole(data);
+      if (!text) {
+        return;
+      }
       const applyNewline = this.hooks.applyNewline;
-      const payload = applyNewline(data, this.hooks.getNewline());
+      const payload = applyNewline(text, this.hooks.getNewline());
       if (this.hooks.getEcho()) {
         this.hooks.echoLocal(this, payload);
       }
@@ -402,15 +424,20 @@
     }
 
     writeLine(text) {
-      this.writeRaw(`${text}\n`);
-      this.agingLog?.ingest(this.hooks.applyNewline(`${text}\n`, this.hooks.getNewline()));
+      const body = stripHangulForConsole(text);
+      if (!body) {
+        return;
+      }
+      this.writeRaw(`${body}\n`);
+      this.agingLog?.ingest(this.hooks.applyNewline(`${body}\n`, this.hooks.getNewline()));
     }
 
     writeKeys(text) {
-      if (!text || !this.isOpen) {
+      const body = stripHangulForConsole(text);
+      if (!body || !this.isOpen) {
         return;
       }
-      const payload = this.hooks.applyNewline(text, this.hooks.getNewline());
+      const payload = this.hooks.applyNewline(body, this.hooks.getNewline());
       this.serial.write(payload).catch((err) => {
         this.term.writeln(`\x1b[31m[원격 송신 실패] ${err.message}\x1b[0m`);
       });
@@ -553,4 +580,5 @@
   }
 
   global.ConsolePane = ConsolePane;
+  global.stripHangulForConsole = stripHangulForConsole;
 })(window);

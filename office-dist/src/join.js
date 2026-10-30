@@ -575,7 +575,7 @@ function refreshQuickCommands() {
 }
 
 function addQuickCommandFromInput() {
-  const result = QuickCommands.add(els.customCommand?.value);
+  const result = QuickCommands.add(stripHangulForConsole(els.customCommand?.value));
   if (result.error) {
     writeGuide('[안내] ' + result.error);
     return;
@@ -586,7 +586,21 @@ function addQuickCommandFromInput() {
   refreshQuickCommands();
 }
 
+function bindNoHangulCommandInput(input) {
+  if (!input) {
+    return;
+  }
+  input.addEventListener('input', () => {
+    const next = stripHangulForConsole(input.value);
+    if (next !== input.value) {
+      input.value = next;
+    }
+  });
+}
+
 function bindQuickCommands() {
+  bindNoHangulCommandInput(els.customCommand);
+  bindNoHangulCommandInput(els.panelCmd);
   refreshQuickCommands();
 
   els.addCommand?.addEventListener('click', () => {
@@ -603,7 +617,7 @@ function bindQuickCommands() {
 }
 
 function sendConsoleCommand(command) {
-  const text = String(command || '').trim();
+  const text = stripHangulForConsole(command).trim();
   if (!text) {
     return;
   }
@@ -821,11 +835,12 @@ function pasteFromClipboard(pane) {
     return;
   }
   navigator.clipboard.readText().then((text) => {
-    if (!text || !joined || !canCmd || !target) {
+    const body = stripHangulForConsole(text);
+    if (!body || !joined || !canCmd || !target) {
       return;
     }
-    shareClient.sendKeys(text, target.id);
-    target.collectTyped(text);
+    shareClient.sendKeys(body, target.id);
+    target.collectTyped(body);
   }).catch((err) => {
     writeGuide('[붙여넣기 실패] ' + err.message, 'red');
   });

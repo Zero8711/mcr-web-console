@@ -589,15 +589,16 @@ function pasteFromClipboard(pane) {
 
 function sendPastedText(text, pane) {
   const target = pane || currentPane();
-  if (!text || !target) {
+  const body = stripHangulForConsole(text);
+  if (!body || !target) {
     return;
   }
   if (!target.isOpen) {
     target.term.writeln('\x1b[33m[안내] 먼저 장비를 연결하세요.\x1b[0m');
     return;
   }
-  target.writeRaw(text);
-  target.collectTyped(text);
+  target.writeRaw(body);
+  target.collectTyped(body);
 }
 
 async function connect() {
@@ -804,7 +805,7 @@ function refreshQuickCommands() {
 }
 
 function addQuickCommandFromInput() {
-  const result = QuickCommands.add(els.customCommand?.value);
+  const result = QuickCommands.add(stripHangulForConsole(els.customCommand?.value));
   if (result.error) {
     currentPane()?.term.writeln('\x1b[33m[안내] ' + result.error + '\x1b[0m');
     return;
@@ -815,10 +816,24 @@ function addQuickCommandFromInput() {
   refreshQuickCommands();
 }
 
+function bindNoHangulCommandInput(input) {
+  if (!input) {
+    return;
+  }
+  input.addEventListener('input', () => {
+    const next = stripHangulForConsole(input.value);
+    if (next !== input.value) {
+      input.value = next;
+    }
+  });
+}
+
 function bindQuickCommands() {
   if (els.customCommand) {
     els.customCommand.disabled = false;
   }
+  bindNoHangulCommandInput(els.customCommand);
+  bindNoHangulCommandInput(els.panelCmd);
   refreshQuickCommands();
 
   els.addCommand?.addEventListener('click', () => {
@@ -839,7 +854,7 @@ function bindQuickCommands() {
  * 개행은 툴바에서 고른 CR / LF / CR+LF 를 따른다.
  */
 function sendConsoleCommand(command, options) {
-  const text = String(command || '').trim();
+  const text = stripHangulForConsole(command).trim();
   if (!text) {
     return;
   }
