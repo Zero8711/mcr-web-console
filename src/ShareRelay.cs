@@ -689,7 +689,7 @@ public class ShareRelay
         var type = Nz(msg.type);
         var role = Nz(msg.role);
         var roomId = Nz(msg.room);
-        var name = SanitizeName(Nz(msg.name), role == "host" ? "시험팀" : "게스트");
+        var name = SanitizeName(Nz(msg.name), role == "host" ? "호스트" : "게스트");
         var password = Nz(msg.password);
         var lockId = Nz(msg.lockId);
 
@@ -724,7 +724,7 @@ public class ShareRelay
             {
                 if (role != "host")
                 {
-                    error = "아직 공유가 시작되지 않았습니다. 시험팀이 먼저 공유를 켜 주세요.";
+                    error = "아직 공유가 시작되지 않았습니다. 먼저 공유를 켜 주세요.";
                 }
                 else if (!IsSharePasswordOk(password))
                 {
@@ -744,7 +744,7 @@ public class ShareRelay
                 {
                     if (room.Host != null && room.Host.Socket != null && room.Host.Socket.IsOpen)
                     {
-                        error = "이 방의 시험팀(host)이 이미 있습니다.";
+                        error = "이 방의 호스트가 이미 있습니다.";
                     }
                     else if (!IsSharePasswordOk(password))
                     {
@@ -758,7 +758,7 @@ public class ShareRelay
                 }
                 else if (room.Host == null || room.Host.Socket == null || !room.Host.Socket.IsOpen)
                 {
-                    error = "시험팀 연결이 없습니다. 공유가 꺼졌을 수 있습니다.";
+                    error = "호스트 연결이 없습니다. 공유가 꺼졌을 수 있습니다.";
                 }
                 else
                 {
@@ -885,7 +885,7 @@ public class ShareRelay
                 room.Host.Socket == null ||
                 !room.Host.Socket.IsOpen)
             {
-                error = "아직 공유가 시작되지 않았습니다. 시험팀이 먼저 공유를 켜 주세요.";
+                error = "아직 공유가 시작되지 않았습니다. 먼저 공유를 켜 주세요.";
             }
             else
             {
@@ -943,7 +943,7 @@ public class ShareRelay
         var client = FindHttpClient(sid);
         if (client == null)
         {
-            return "{\"events\":[{\"type\":\"closed\",\"message\":\"시험팀이 공유를 종료했거나 연결이 끊겼습니다.\"}],\"closed\":true}";
+            return "{\"events\":[{\"type\":\"closed\",\"message\":\"공유가 종료되었거나 연결이 끊겼습니다.\"}],\"closed\":true}";
         }
 
         client.LastSeen = DateTime.UtcNow;
@@ -1949,7 +1949,7 @@ public class ShareRelay
 
         if (hostLeft)
         {
-            BroadcastToGuests(client.RoomId, WireMsg.Closed("시험팀이 공유를 종료했습니다."));
+            BroadcastToGuests(client.RoomId, WireMsg.Closed("공유가 종료되었습니다."));
             CloseGuests(client.RoomId);
             lock (Gate)
             {

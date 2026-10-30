@@ -1,6 +1,6 @@
 /**
  * 한 COM(또는 원격으로 보는 한 장비)의 터미널 칸.
- * 시험팀은 serial 을 열고, 개발팀은 로그만 받는다.
+ * 호스트는 serial 을 열고, 접속 측은 로그만 받는다.
  */
 (function (global) {
   const HANGUL =
@@ -105,7 +105,7 @@
           '<p class="console-empty-text">위쪽 [연결] 로 장비 COM 을 고르세요.<br>장비가 여러 대면 [콘솔 추가] 로 칸을 늘립니다.</p>';
       } else {
         this.emptyEl.innerHTML =
-          '<p class="console-empty-title">시험팀 화면을 기다리는 중</p>' +
+          '<p class="console-empty-title">공유 화면을 기다리는 중</p>' +
           '<p class="console-empty-text">이름과 비밀번호를 넣고 [접속] 하세요.</p>';
       }
       this.body.appendChild(this.emptyEl);

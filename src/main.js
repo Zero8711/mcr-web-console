@@ -956,7 +956,7 @@ async function startShare() {
   shareClient.onReady = () => {
     const pane = currentPane();
     pane?.term.writeln('');
-    pane?.term.writeln('\x1b[32m[공유] 개발팀에 아래 링크와 비밀번호를 같이 보내세요. 이 탭을 닫으면 공유가 끊깁니다.\x1b[0m');
+    pane?.term.writeln('\x1b[32m[공유] 아래 링크와 비밀번호를 같이 보내세요. 이 탭을 닫으면 공유가 끊깁니다.\x1b[0m');
     for (const url of shareUrls) {
       pane?.term.writeln(`\x1b[32m       ${url}\x1b[0m`);
     }

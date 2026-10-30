@@ -1,6 +1,6 @@
 /**
  * 시험 PC 중계 서버와 붙는 공유 클라이언트.
- * host(시험팀): WebSocket. guest(개발팀): HTTP 폴링.
+ * host: WebSocket. guest: HTTP 폴링.
  * 공유기 NAT 뒤에서 WebSocket 프레임이 막혀도 join.html 과 같은 HTTP 로 방에 들어간다.
  */
 (function (global) {
@@ -10,7 +10,7 @@
     constructor(options) {
       this.role = options.role;
       this.room = options.room;
-      this.name = options.name || (options.role === 'host' ? '시험팀' : '개발팀');
+      this.name = options.name || (options.role === 'host' ? '호스트' : '게스트');
       this.sharePassword = String(options.password || '');
       this.lockId = String(options.lockId || '');
       this.passGuards = {};
@@ -132,7 +132,7 @@
           }
           this.failed = true;
           this.onError?.(
-            '웹 페이지는 열렸지만 공유 방에는 들어가지 못했습니다. 시험팀 mcr_console.bat 창에 [ws] host 로그가 있는지 확인하세요.'
+            '웹 페이지는 열렸지만 공유 방에는 들어가지 못했습니다. mcr_console.bat 창에 [ws] host 로그가 있는지 확인하세요.'
           );
         }, 8000);
       });
@@ -614,7 +614,7 @@
 
     /**
      * GitHub Pages 등 정적 호스팅에서는 로컬 중계가 없다.
-     * 시험팀 브라우저가 방이 되고, 개발팀은 WebRTC 로 붙는다.
+     * 호스트 브라우저가 방이 되고, 접속 측은 WebRTC 로 붙는다.
      */
     connectWebRtc() {
       this.transport = 'webrtc';
@@ -635,7 +635,7 @@
         }
         this.failed = true;
         this.onError?.(
-          '공유 방에 들어가지 못했습니다. 시험팀 탭이 열려 있는지 확인하세요. 사내망 PC만 안 되고 핸드폰은 되면, 회사 방화벽이 P2P를 막은 것입니다.'
+          '공유 방에 들어가지 못했습니다. 공유를 연 탭이 열려 있는지 확인하세요. 사내망 PC만 안 되고 핸드폰은 되면, 회사 방화벽이 P2P를 막은 것입니다.'
         );
         try {
           peer.destroy();
@@ -697,7 +697,7 @@
           return;
         }
         this.connected = false;
-        this.onClosed?.('시험팀 공유가 종료되었습니다.');
+        this.onClosed?.('공유가 종료되었습니다.');
       });
 
       conn.on('error', () => {
@@ -705,7 +705,7 @@
           return;
         }
         this.failed = true;
-        this.onError?.('시험팀 탭에 연결하지 못했습니다. 공유가 켜져 있는지 확인하세요.');
+        this.onError?.('공유 탭에 연결하지 못했습니다. 공유가 켜져 있는지 확인하세요.');
       });
     }
 
@@ -766,10 +766,10 @@
       }
 
       clearTimeout(helloTimer);
-      const name = String(msg.name || conn.metadata?.name || '개발팀')
+      const name = String(msg.name || conn.metadata?.name || '게스트')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 20) || '개발팀';
+        .slice(0, 20) || '게스트';
       const id = makeGuestId();
       this.rtcGuests.push({ conn, name, id, canCmd: false });
       this.sendRtcTo(conn, { type: 'welcome', id });
@@ -1470,7 +1470,7 @@
 
   /**
    * mcr_console.bat 주소는 로컬 TCP 중계.
-   * 시험팀 탭은 127.0.0.1, 개발팀은 사내 IP 또는 UPnP WAN:8765 로 들어온다.
+   * 호스트 탭은 127.0.0.1, 접속 측은 사내 IP 또는 UPnP WAN:8765 로 들어온다.
    * GitHub Pages 만 브라우저 간 WebRTC 를 쓴다.
    * 포트가 비어 보이는 경우에도 /api/info 가 있으면 중계로 붙인다.
    */

@@ -1,8 +1,8 @@
 /**
- * 개발팀(guest) 화면.
- * COM 은 열지 않고, 시험팀 탭이 중계로 보내 준 로그만 보여 준다.
- * 명령·키 입력은 HTTP 로 시험팀 PC 에 전달한다.
- * 시험팀이 콘솔을 여러 칸 열면 같은 링크에 칸이 같이 생긴다.
+ * 원격(guest) 화면.
+ * COM 은 열지 않고, 공유를 연 탭이 중계로 보내 준 로그만 보여 준다.
+ * 명령·키 입력은 HTTP 로 공유 PC 에 전달한다.
+ * 호스트가 콘솔을 여러 칸 열면 같은 링크에 칸이 같이 생긴다.
  */
 const room = ShareUtil.roomFromLocation();
 
@@ -191,7 +191,7 @@ refreshJoinButton();
 
 if (!room) {
   els.warning.hidden = false;
-  els.warning.textContent = '공유 링크에 방 토큰이 없습니다. 시험팀이 복사한 URL 로 열어 주세요.';
+  els.warning.textContent = '공유 링크에 방 토큰이 없습니다. 공유할 때 복사한 URL 로 열어 주세요.';
   els.statusText.textContent = '방 없음';
   els.join.disabled = true;
   writeGuide('[안내] join.html?room=... 형식의 링크로 접속하세요.');
@@ -202,8 +202,8 @@ if (!room) {
     schedulePassLockUnlock();
   } else {
     setStatus(false, '이름을 입력하고 접속하세요');
-    writeGuide('[안내] 이름과 시험팀에게 받은 비밀번호를 적은 뒤 [접속] 을 누르세요.');
-    writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 시험팀이 허용하면 열립니다.');
+    writeGuide('[안내] 이름과 공유 비밀번호를 적은 뒤 [접속] 을 누르세요.');
+    writeGuide('[안내] 처음에는 화면 보기와 채팅만 됩니다. 명령은 공유를 연 쪽이 허용하면 열립니다.');
   }
 }
 
@@ -318,7 +318,7 @@ function connectShare() {
   const password = readGuestPassword();
   if (!password) {
     setStatus(false, '비밀번호를 입력하세요');
-    writeGuide('[안내] 시험팀에게 받은 비밀번호를 입력하세요.');
+    writeGuide('[안내] 공유 비밀번호를 입력하세요.');
     els.pass?.focus();
     return;
   }
@@ -366,7 +366,7 @@ function connectShare() {
     }
     writeGuide('[공유] ' + shareClient.name + ' 으로 들어왔습니다. 콘솔 보기와 채팅은 바로 됩니다.', 'green');
     if (!shareClient.canCmd) {
-      writeGuide('[공유] 장비 명령은 시험팀이 허용하면 이 화면에 열립니다.');
+      writeGuide('[공유] 장비 명령은 공유를 연 쪽이 허용하면 이 화면에 열립니다.');
     }
     fitAllPanes();
     setTimeout(fitAllPanes, 200);
@@ -429,7 +429,7 @@ function connectShare() {
       return;
     }
     if (allowed) {
-      writeGuide('[공유] 시험팀이 명령 입력을 허용했습니다. 콘솔 칸을 선택한 뒤 보내세요.', 'green');
+      writeGuide('[공유] 명령 입력이 허용되었습니다. 콘솔 칸을 선택한 뒤 보내세요.', 'green');
     } else {
       writeGuide('[공유] 명령 입력이 해제되었습니다. 화면 보기와 채팅만 됩니다.');
     }
@@ -479,7 +479,7 @@ function renderGuestAgingHits(slot) {
   const list = agingHitsBySlot[String(slot || currentPane()?.id || '1')] || [];
   ShareUtil.renderAgingHitList(els.agingHitList, list, {
     hitsOnly: true,
-    emptyText: '시험팀이 감시를 켜면 여기에 횟수가 보입니다.',
+    emptyText: '감시를 켜면 여기에 횟수가 보입니다.',
   });
 }
 
@@ -528,7 +528,7 @@ function showAbnormalAlert(title, keyword, fileName, triggerLine, timeText) {
     els.alertLine.textContent = triggerLine || keyword || '';
   }
   if (els.alertFile) {
-    els.alertFile.textContent = fileName ? '시험팀 저장: ' + fileName : '';
+    els.alertFile.textContent = fileName ? '저장: ' + fileName : '';
   }
   if (els.alertModal) {
     els.alertModal.hidden = false;
@@ -631,11 +631,11 @@ function sendConsoleCommand(command) {
 
   const pane = currentPane();
   if (!shareClient || !shareClient.connected) {
-    writeGuide('[안내] 아직 시험팀 방에 들어가지 못했습니다. 상태가 초록이 된 뒤 보내세요.');
+    writeGuide('[안내] 아직 공유 방에 들어가지 못했습니다. 상태가 초록이 된 뒤 보내세요.');
     return;
   }
   if (!canCmd) {
-    writeGuide('[안내] 지금은 채팅만 됩니다. 명령은 시험팀이 허용해야 합니다.');
+    writeGuide('[안내] 지금은 채팅만 됩니다. 명령은 공유를 연 쪽이 허용해야 합니다.');
     return;
   }
   if (!pane) {
@@ -654,7 +654,7 @@ function sendGuestText(text) {
     return;
   }
   if (!shareClient.connected) {
-    writeGuide('[안내] 아직 시험팀 방에 들어가지 못했습니다. 상태가 초록이 된 뒤 보내세요.');
+    writeGuide('[안내] 아직 공유 방에 들어가지 못했습니다. 상태가 초록이 된 뒤 보내세요.');
     return;
   }
   shareClient.sendChat(body);
