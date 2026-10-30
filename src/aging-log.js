@@ -25,6 +25,7 @@
       this.recording = false;
       this.enabled = false;
       this.partialLine = '';
+      this.lineState = createTermLineState();
       this.recentLines = [];
       this.afterLineCount = 0;
       this.finishing = false;
@@ -119,11 +120,7 @@
 
       this.finishing = true;
 
-      if (this.partialLine) {
-        this.enqueueWrite(this.partialLine + '\r\n');
-        this.partialLine = '';
-      }
-
+      this.writeLeftoverLine();
       this.finishCapture('user-stop');
     }
 
@@ -165,14 +162,13 @@
     async resetSession() {
       await this.flushAndStop();
       this.recentLines = [];
-      this.partialLine = '';
+      this.resetLineBuffer();
       this.notify();
     }
 
     async flushAndStop() {
-      if (this.recording && this.partialLine) {
-        this.enqueueWrite(this.partialLine + '\r\n');
-        this.partialLine = '';
+      if (this.recording) {
+        this.writeLeftoverLine();
       }
 
       try {
@@ -203,20 +199,33 @@
 
     /**
      * 시리얼 수신 텍스트를 줄 단위로 모아 감시한다.
-     * 화면 출력과는 별개로 호출한다.
+     * CR·ANSI 는 화면과 같게 맞춘 뒤 파일에 넣는다.
      */
     ingest(text) {
       if (!text) {
         return;
       }
 
-      this.partialLine += text;
-      const pieces = this.partialLine.split(/\r\n|\n/);
-      this.partialLine = pieces.pop() ?? '';
+      const flattened = flattenTerminalChunk(text, this.lineState);
+      this.lineState = flattened.state;
+      this.partialLine = currentTermLine(this.lineState);
 
-      for (const line of pieces) {
-        this.handleCompleteLine(line.replace(/\r/g, ''));
+      for (const line of flattened.lines) {
+        this.handleCompleteLine(line);
       }
+    }
+
+    writeLeftoverLine() {
+      const leftover = currentTermLine(this.lineState);
+      this.resetLineBuffer();
+      if (leftover) {
+        this.enqueueWrite(leftover + '\r\n');
+      }
+    }
+
+    resetLineBuffer() {
+      this.lineState = createTermLineState();
+      this.partialLine = '';
     }
 
     getState() {

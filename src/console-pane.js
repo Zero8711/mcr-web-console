@@ -460,7 +460,6 @@
         return;
       }
       this.writeRaw(`${body}\n`);
-      this.agingLog?.ingest(this.hooks.applyNewline(`${body}\n`, this.hooks.getNewline()));
     }
 
     writeKeys(text) {
@@ -472,13 +471,11 @@
       this.serial.write(payload).catch((err) => {
         this.term.writeln(`\x1b[31m[원격 송신 실패] ${err.message}\x1b[0m`);
       });
-      this.agingLog?.ingest(payload);
     }
 
     collectTyped(chunk) {
       const lines = this.typedLines.push(chunk);
       for (const line of lines) {
-        this.agingLog?.ingest(`${line}\n`);
         this.hooks.onShareCmdLog?.(this, line);
       }
     }

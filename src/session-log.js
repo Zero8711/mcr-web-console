@@ -13,6 +13,7 @@
       this.fileName = '';
       this.recording = false;
       this.partialLine = '';
+      this.lineState = createTermLineState();
       this.writeChain = Promise.resolve();
       this.flushTimer = null;
       this.onStateChange = null;
@@ -50,6 +51,7 @@
       this.fileHandle = handle;
       this.fileName = handle.name;
       this.partialLine = '';
+      this.lineState = createTermLineState();
       this.recording = true;
       this.writeChain = Promise.resolve();
 
@@ -82,13 +84,12 @@
         return;
       }
 
-      this.partialLine += text;
-      const pieces = this.partialLine.split(/\r\n|\n/);
-      this.partialLine = pieces.pop() ?? '';
+      const flattened = flattenTerminalChunk(text, this.lineState);
+      this.lineState = flattened.state;
+      this.partialLine = currentTermLine(this.lineState);
 
       let block = '';
-      for (const piece of pieces) {
-        const line = stripAnsi(piece.replace(/\r/g, ''));
+      for (const line of flattened.lines) {
         block += formatNow() + '  ' + line + '\r\n';
       }
       if (block) {
@@ -101,9 +102,10 @@
         return this.fileName;
       }
 
-      if (this.partialLine) {
-        const leftover = stripAnsi(this.partialLine.replace(/\r/g, ''));
-        this.partialLine = '';
+      const leftover = currentTermLine(this.lineState);
+      this.lineState = createTermLineState();
+      this.partialLine = '';
+      if (leftover) {
         this.enqueueWrite(formatNow() + '  ' + leftover + '\r\n');
       }
 
@@ -210,10 +212,6 @@
     notify() {
       this.onStateChange?.(this.isRecording, this.fileName);
     }
-  }
-
-  function stripAnsi(text) {
-    return String(text || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
   }
 
   function pad2(value) {
