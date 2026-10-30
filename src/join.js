@@ -21,7 +21,7 @@ const els = {
   customCommand: document.getElementById('txt-custom-command'),
   sendCommand: document.getElementById('btn-send-command'),
   addCommand: document.getElementById('btn-add-command'),
-  editCommands: document.getElementById('btn-edit-commands'),
+  clearCommands: document.getElementById('btn-clear-commands'),
   resetCommands: document.getElementById('btn-reset-commands'),
   chatLog: document.getElementById('chat-log'),
   chatForm: document.getElementById('chat-form'),
@@ -49,7 +49,6 @@ let shareClient = null;
 let joined = false;
 let joining = false;
 let canCmd = false;
-let commandEditing = false;
 let passLockTimer = null;
 let titleBlinkTimer = null;
 const agingHitsBySlot = {};
@@ -564,7 +563,6 @@ function stopTitleBlink() {
 function refreshQuickCommands() {
   QuickCommands.render(els.quickCommands, {
     sendEnabled: joined && canCmd,
-    editing: commandEditing,
     onSend: sendConsoleCommand,
     onRemove: (command) => {
       QuickCommands.remove(command);
@@ -572,11 +570,8 @@ function refreshQuickCommands() {
     },
   });
 
-  if (els.editCommands) {
-    els.editCommands.textContent = commandEditing ? '편집 끝' : '편집';
-  }
-  if (els.resetCommands) {
-    els.resetCommands.hidden = !commandEditing;
+  if (els.clearCommands) {
+    els.clearCommands.disabled = QuickCommands.load().length === 0;
   }
 }
 
@@ -612,8 +607,14 @@ function bindQuickCommands() {
   els.addCommand?.addEventListener('click', () => {
     addQuickCommandFromInput();
   });
-  els.editCommands?.addEventListener('click', () => {
-    commandEditing = !commandEditing;
+  els.clearCommands?.addEventListener('click', () => {
+    if (QuickCommands.load().length === 0) {
+      return;
+    }
+    if (!window.confirm('지금 있는 명령 버튼을 모두 지울까요?')) {
+      return;
+    }
+    QuickCommands.clear();
     refreshQuickCommands();
   });
   els.resetCommands?.addEventListener('click', () => {

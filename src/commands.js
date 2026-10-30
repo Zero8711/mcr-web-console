@@ -95,20 +95,25 @@
     return list;
   }
 
+  function clearQuickCommands() {
+    saveQuickCommands([]);
+    return [];
+  }
+
   function renderQuickCommandButtons(container, options) {
     if (!container) {
       return;
     }
 
     const sendEnabled = Boolean(options?.sendEnabled);
-    const editing = Boolean(options?.editing);
     const onSend = options?.onSend;
     const onRemove = options?.onRemove;
+    const list = loadQuickCommands();
 
     container.replaceChildren();
-    container.classList.toggle('command-editing', editing);
+    container.classList.toggle('command-empty', list.length === 0);
 
-    for (const item of loadQuickCommands()) {
+    for (const item of list) {
       const wrap = document.createElement('span');
       wrap.className = 'cmd-item';
 
@@ -128,7 +133,6 @@
       remove.className = 'btn btn-cmd-remove';
       remove.textContent = '×';
       remove.title = '버튼 삭제: ' + item.command;
-      remove.hidden = !editing;
       remove.addEventListener('click', () => {
         onRemove?.(item.command);
       });
@@ -144,6 +148,7 @@
     load: loadQuickCommands,
     add: addQuickCommand,
     remove: removeQuickCommand,
+    clear: clearQuickCommands,
     reset: resetQuickCommands,
     render: renderQuickCommandButtons,
   };

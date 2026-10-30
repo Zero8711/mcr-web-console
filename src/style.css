@@ -393,7 +393,7 @@ body {
   padding: 4px 10px;
   font-size: 12px;
   font-family: Consolas, "Courier New", monospace;
-  border-radius: 999px;
+  border-radius: 999px 0 0 999px;
   background: #252b31;
 }
 
@@ -403,11 +403,13 @@ body {
   font-size: 12px;
   line-height: 1;
   border-radius: 0 999px 999px 0;
+  opacity: 0.85;
 }
 
-.command-editing .cmd-item .btn-cmd {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+.command-buttons .btn-cmd-remove:hover:not(:disabled) {
+  opacity: 1;
+  background: #4a2c2c;
+  border-color: #7a3f3f;
 }
 
 .command-custom {
