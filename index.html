@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261002d" />
+    <link rel="stylesheet" href="./src/style.css?v=20261030c" />
   </head>
   <body>
     <div id="app">
-      <header class="toolbar">
+      <header class="toolbar toolbar-serial">
+        <span class="toolbar-label">연결</span>
         <div class="toolbar-group">
           <button id="btn-connect" type="button" class="btn btn-primary">연결</button>
           <button id="btn-disconnect" type="button" class="btn" disabled>해제</button>
@@ -83,6 +84,7 @@
       </header>
 
       <header class="toolbar toolbar-aging">
+        <span class="toolbar-label">이상로그</span>
         <div class="toolbar-group">
           <span id="aging-target" class="aging-target">대상: 장비 1</span>
           <button id="btn-log-file" type="button" class="btn">저장 파일</button>
@@ -117,6 +119,7 @@
       </div>
 
       <header class="toolbar toolbar-commands">
+        <span class="toolbar-label">명령</span>
         <div id="quick-commands" class="toolbar-group command-buttons"></div>
         <div class="toolbar-group command-custom">
           <label>
@@ -143,6 +146,7 @@
       </header>
 
       <header class="toolbar toolbar-share">
+        <span class="toolbar-label">공유</span>
         <div class="toolbar-group">
           <label>
             이름
