@@ -19,6 +19,7 @@
     '2) 이 명령으로 무엇을 확인하는지\n' +
     '3) 출력에서 눈에 띄는 정보(인터페이스, IP, 링크, 에러 카운터 등)\n' +
     '화면에 없는 값은 추측이라고 밝히세요. ' +
+    '시험자 질문이 있으면 그 질문에 먼저 답하세요. ' +
     '장비에 보낼 명령은 제안만 하고, 실행했다고 말하지 마세요.';
 
   function loadSettings() {
@@ -61,7 +62,7 @@
     return '';
   }
 
-  async function analyzePane(pane, settings) {
+  async function analyzePane(pane, settings, question) {
     const readyError = configError(settings);
     if (readyError) {
       throw new Error(readyError);
@@ -75,15 +76,20 @@
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 ifconfig 를 먼저 치세요.');
     }
 
+    const ask = String(question || '').trim();
+
     if (isTrialMode(settings)) {
-      return explainFromScreen(pane, logText);
+      return explainFromScreen(pane, logText, ask);
     }
 
-    const userText =
+    let userText =
       '장비: ' + (pane.title || '콘솔') + '\n' +
       '마지막 명령: ' + (pane.lastCommand || '(화면에서 추정)') + '\n\n' +
       '화면:\n' +
       logText;
+    if (ask) {
+      userText += '\n\n시험자 질문:\n' + ask;
+    }
 
     const answer = await requestChat(settings, userText);
     if (!answer) {
@@ -96,12 +102,13 @@
    * 유료 API 없이, 화면 텍스트를 읽었는지만 확인한다.
    * ifconfig 출력에서 IP·인터페이스는 실제로 뽑아 보여 준다.
    */
-  function explainFromScreen(pane, logText) {
+  function explainFromScreen(pane, logText, question) {
     const command = pickCommand(pane, logText);
     const help = commandHelp(command);
     const facts = command.toLowerCase().indexOf('ifconfig') >= 0
       ? readIfconfigFacts(logText)
       : [];
+    const ask = String(question || '').trim();
 
     const lines = [
       '[화면 읽기 시험 · 유료 API 없음]',
@@ -121,7 +128,12 @@
     }
 
     lines.push('');
-    lines.push('이 칸이 뜨면 콘솔 → 분석 칸 연결은 된 것입니다. 실제 Claude/GPT 는 아직 부르지 않았습니다.');
+    if (ask) {
+      lines.push('질문: ' + ask);
+      lines.push('답: (지금은 API 가 없어 답을 쓰지 않습니다. 질문과 화면은 같이 묶였습니다.)');
+    } else {
+      lines.push('이 칸이 뜨면 콘솔 → 분석 칸 연결은 된 것입니다. 실제 Claude/GPT 는 아직 부르지 않았습니다.');
+    }
     return lines.join('\n');
   }
 

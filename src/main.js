@@ -66,6 +66,9 @@ const els = {
   llmAfterCommand: document.getElementById('chk-llm-after-command'),
   llmResult: document.getElementById('llm-result'),
   llmAnalyze: document.getElementById('btn-llm-analyze'),
+  llmQuestion: document.getElementById('txt-llm-question'),
+  llmAskForm: document.getElementById('llm-ask-form'),
+  llmAsk: document.getElementById('btn-llm-ask'),
 };
 
 const PAGE_TITLE = document.title;
@@ -923,7 +926,17 @@ function bindLlmAnalyze() {
   els.llmKey?.addEventListener('change', persist);
   els.llmAfterCommand?.addEventListener('change', persist);
   els.llmAnalyze?.addEventListener('click', () => {
-    runLlmAnalyze(currentPane());
+    runLlmAnalyze(currentPane(), readLlmQuestion());
+  });
+  els.llmAskForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const question = readLlmQuestion();
+    if (!question) {
+      showLlmResult('질문을 입력하세요.', true);
+      els.llmQuestion?.focus();
+      return;
+    }
+    runLlmAnalyze(currentPane(), question);
   });
 }
 
@@ -953,28 +966,36 @@ function scheduleLlmAnalyze(pane) {
 
   llmAnalyzeTimers[id] = setTimeout(() => {
     llmAnalyzeTimers[id] = null;
-    runLlmAnalyze(pane);
+    runLlmAnalyze(pane, '');
   }, 3000);
 }
 
-function runLlmAnalyze(pane) {
+function readLlmQuestion() {
+  return String(els.llmQuestion?.value || '').trim();
+}
+
+function runLlmAnalyze(pane, question) {
   if (!els.llmResult || llmAnalyzeBusy) {
     return;
   }
 
   const settings = readLlmSettingsFromForm();
   LlmAnalyze.saveSettings(settings);
+  const ask = String(question || '').trim();
 
   llmAnalyzeBusy = true;
   if (els.llmAnalyze) {
     els.llmAnalyze.disabled = true;
+  }
+  if (els.llmAsk) {
+    els.llmAsk.disabled = true;
   }
   const waiting = LlmAnalyze.isTrialMode(settings)
     ? '화면을 읽는 중… (유료 API 없음)'
     : '분석 중… 화면 로그를 모델에 보냅니다.';
   showLlmResult(waiting, false);
 
-  LlmAnalyze.analyzePane(pane, settings)
+  LlmAnalyze.analyzePane(pane, settings, ask)
     .then((text) => {
       showLlmResult(text, false);
     })
@@ -985,6 +1006,9 @@ function runLlmAnalyze(pane) {
       llmAnalyzeBusy = false;
       if (els.llmAnalyze) {
         els.llmAnalyze.disabled = false;
+      }
+      if (els.llmAsk) {
+        els.llmAsk.disabled = false;
       }
     });
 }

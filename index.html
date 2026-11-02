@@ -6,7 +6,7 @@
     <title>웹 시리얼 콘솔</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261102d" />
+    <link rel="stylesheet" href="./src/style.css?v=20261102f" />
   </head>
   <body>
     <div id="app">
@@ -244,7 +244,7 @@
         <aside id="llm-panel" class="chat-panel llm-panel">
           <div class="chat-header">로그 분석 · 화면 읽기 시험</div>
           <div class="llm-settings">
-            <p class="llm-trial-note">지금은 유료 API 없이, 화면 로그를 읽었는지만 확인합니다.</p>
+            <p class="llm-trial-note">지금은 유료 API 없이 화면을 읽고, 질문 칸이 붙는지만 확인합니다.</p>
             <label class="checkbox">
               <input id="chk-llm-after-command" type="checkbox" checked />
               명령 후 자동 분석
@@ -287,9 +287,19 @@
           <div class="side-empty" id="llm-empty">
             <p class="side-empty-title">화면 읽기 시험</p>
             <p class="side-empty-live">
-              ifconfig 를 친 뒤 [이 칸 분석] 을 누르세요. 결제 없이 콘솔 줄이 이 칸으로 오는지 확인합니다.
+              ifconfig 를 친 뒤 [이 칸 분석] 을 누르거나, 아래에 질문을 적고 [묻기] 를 누르세요.
             </p>
           </div>
+          <form id="llm-ask-form" class="chat-form llm-ask">
+            <input
+              id="txt-llm-question"
+              type="text"
+              spellcheck="false"
+              placeholder="이 화면에 대해 질문"
+              autocomplete="off"
+            />
+            <button id="btn-llm-ask" type="submit" class="btn">묻기</button>
+          </form>
           <div class="chat-form llm-actions">
             <button id="btn-llm-analyze" type="button" class="btn btn-primary">이 칸 분석</button>
           </div>
@@ -338,8 +348,8 @@
     <script src="./src/share.js?v=20261030g"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20261030h"></script>
-    <script src="./src/llm-analyze.js?v=20261102e"></script>
+    <script src="./src/llm-analyze.js?v=20261102f"></script>
     <script src="./src/console-pane.js?v=20261102e"></script>
-    <script src="./src/main.js?v=20261102d"></script>
+    <script src="./src/main.js?v=20261102f"></script>
   </body>
 </html>

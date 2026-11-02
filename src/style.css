@@ -799,6 +799,10 @@ body {
   width: 100%;
 }
 
+.llm-ask {
+  border-top: 1px solid var(--toolbar-border);
+}
+
 .side-empty {
   display: none;
   flex: 1;
