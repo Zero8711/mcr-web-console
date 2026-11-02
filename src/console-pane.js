@@ -494,6 +494,7 @@
 
     /**
      * 화면에 보이는 최근 줄을 텍스트로 모은다. LLM 분석용.
+     * xterm 이 칸 너비 때문에 나눈 줄은 다시 한 줄로 붙인다.
      */
     getRecentLog(maxLines) {
       const buf = this.term?.buffer?.active;
@@ -508,7 +509,11 @@
       for (let i = start; i < buf.length; i += 1) {
         const line = buf.getLine(i);
         const text = line ? line.translateToString(true).replace(/\s+$/g, '') : '';
-        lines.push(text);
+        if (line && line.isWrapped && lines.length) {
+          lines[lines.length - 1] += text;
+        } else {
+          lines.push(text);
+        }
       }
 
       while (lines.length && !lines[lines.length - 1]) {

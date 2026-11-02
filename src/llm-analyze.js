@@ -97,7 +97,7 @@
    * ifconfig 출력에서 IP·인터페이스는 실제로 뽑아 보여 준다.
    */
   function explainFromScreen(pane, logText) {
-    const command = String(pane.lastCommand || guessCommand(logText) || '').trim();
+    const command = pickCommand(pane, logText);
     const help = commandHelp(command);
     const facts = command.toLowerCase().indexOf('ifconfig') >= 0
       ? readIfconfigFacts(logText)
@@ -130,6 +130,9 @@
     if (name === 'ifconfig') {
       return '이 명령으로 무엇을 확인하는지: 인터페이스 이름, IP, MAC, 링크 UP/DOWN, RX/TX 에러.';
     }
+    if (name === 'ethtool') {
+      return '이 명령으로 무엇을 확인하는지: NIC 속도, 링크, 오프로드, 도움말(-h).';
+    }
     if (name === 'ps') {
       return '이 명령으로 무엇을 확인하는지: 떠 있는 프로세스와 데몬.';
     }
@@ -148,11 +151,27 @@
     return '이 명령으로 무엇을 확인하는지: 명령을 찾지 못했습니다. ifconfig 버튼을 눌러 보세요.';
   }
 
+  function pickCommand(pane, logText) {
+    const typed = String(pane.lastCommand || '').trim();
+    const seen = guessCommand(logText);
+    if (seen && typed && seen !== typed && seen.endsWith(typed)) {
+      return seen;
+    }
+    return typed || seen || '';
+  }
+
+  /**
+   * 프롬프트 뒤의 명령을 통째로 가져온다. -h 같은 옵션도 포함.
+   * 칸이 좁아 나뉜 줄은 getRecentLog 에서 이미 붙여 둔다.
+   */
   function guessCommand(logText) {
     const lines = String(logText || '').split(/\n/);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
       const line = lines[i];
-      const hashed = line.match(/#\s*([A-Za-z][A-Za-z0-9._\/-]*(?:\s+[A-Za-z0-9._\/-]+)*)$/);
+      if (!/@/.test(line) || !/[#\$]/.test(line)) {
+        continue;
+      }
+      const hashed = line.match(/[#\$]\s+(\S.*)$/);
       if (hashed) {
         return hashed[1].trim();
       }
