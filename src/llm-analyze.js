@@ -42,12 +42,15 @@
   }
 
   function isTrialMode(settings) {
-    return !String(settings?.endpoint || '').trim();
+    return !String(settings?.apiKey || '').trim();
   }
 
   function configError(settings) {
     if (isTrialMode(settings)) {
       return '';
+    }
+    if (!String(settings?.endpoint || '').trim()) {
+      return '유료 API 를 쓰려면 주소를 넣으세요.';
     }
     if (!String(settings?.model || '').trim()) {
       return '모델 이름을 넣으세요.';

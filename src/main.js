@@ -897,6 +897,10 @@ function bindLlmAnalyze() {
   }
 
   const saved = LlmAnalyze.loadSettings();
+  if (!saved.apiKey) {
+    saved.endpoint = '';
+    LlmAnalyze.saveSettings(saved);
+  }
   if (els.llmEndpoint) {
     els.llmEndpoint.value = saved.endpoint;
   }
