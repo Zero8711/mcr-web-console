@@ -741,6 +741,33 @@ body {
   font-size: 12px;
 }
 
+.llm-trial-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.llm-api-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.llm-api-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.llm-api-details[open] {
+  gap: 8px;
+}
+
+.llm-api-details[open] label {
+  margin-top: 6px;
+}
+
 .llm-result {
   flex: 1;
   min-height: 0;

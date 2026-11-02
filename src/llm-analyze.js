@@ -1,7 +1,8 @@
 /**
- * 선택 칸의 최근 화면을 LLM 에 보내 짧게 설명한다.
- * 최소 시험용. 장비로는 명령을 보내지 않는다.
- * OpenAI 호환 chat/completions 만 사용한다.
+ * 선택 칸의 최근 화면을 짧게 설명한다.
+ * API 주소가 비어 있으면 유료 호출 없이 화면만 읽는다.
+ * 주소를 넣으면 OpenAI 호환 chat/completions 을 부른다.
+ * 장비로는 명령을 보내지 않는다.
  */
 (function (global) {
   const ENDPOINT_KEY = 'llm-endpoint';
@@ -40,9 +41,13 @@
     return Boolean(String(settings?.endpoint || '').trim() && String(settings?.model || '').trim());
   }
 
+  function isTrialMode(settings) {
+    return !String(settings?.endpoint || '').trim();
+  }
+
   function configError(settings) {
-    if (!String(settings?.endpoint || '').trim()) {
-      return 'API 주소를 넣으세요. OpenAI 호환 chat/completions 주소입니다.';
+    if (isTrialMode(settings)) {
+      return '';
     }
     if (!String(settings?.model || '').trim()) {
       return '모델 이름을 넣으세요.';
@@ -67,6 +72,10 @@
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 ifconfig 를 먼저 치세요.');
     }
 
+    if (isTrialMode(settings)) {
+      return explainFromScreen(pane, logText);
+    }
+
     const userText =
       '장비: ' + (pane.title || '콘솔') + '\n' +
       '마지막 명령: ' + (pane.lastCommand || '(화면에서 추정)') + '\n\n' +
@@ -78,6 +87,99 @@
       throw new Error('모델이 빈 답을 돌려줬습니다.');
     }
     return answer;
+  }
+
+  /**
+   * 유료 API 없이, 화면 텍스트를 읽었는지만 확인한다.
+   * ifconfig 출력에서 IP·인터페이스는 실제로 뽑아 보여 준다.
+   */
+  function explainFromScreen(pane, logText) {
+    const command = String(pane.lastCommand || guessCommand(logText) || '').trim();
+    const help = commandHelp(command);
+    const facts = command.toLowerCase().indexOf('ifconfig') >= 0
+      ? readIfconfigFacts(logText)
+      : [];
+
+    const lines = [
+      '[화면 읽기 시험 · 유료 API 없음]',
+      '장비: ' + (pane.title || '콘솔'),
+      '',
+      '1) 마지막 명령: ' + (command || '(화면에서 명령을 찾지 못했습니다)'),
+      '2) ' + help,
+    ];
+
+    if (facts.length) {
+      lines.push('3) 화면에서 읽은 값:');
+      for (const fact of facts) {
+        lines.push('   - ' + fact);
+      }
+    } else {
+      lines.push('3) 화면에서 ' + logText.split(/\n/).filter(Boolean).length + '줄을 읽었습니다.');
+    }
+
+    lines.push('');
+    lines.push('이 칸이 뜨면 콘솔 → 분석 칸 연결은 된 것입니다. 실제 Claude/GPT 는 아직 부르지 않았습니다.');
+    return lines.join('\n');
+  }
+
+  function commandHelp(command) {
+    const name = String(command || '').toLowerCase().split(/\s+/)[0];
+    if (name === 'ifconfig') {
+      return '이 명령으로 무엇을 확인하는지: 인터페이스 이름, IP, MAC, 링크 UP/DOWN, RX/TX 에러.';
+    }
+    if (name === 'ps') {
+      return '이 명령으로 무엇을 확인하는지: 떠 있는 프로세스와 데몬.';
+    }
+    if (name === 'logread' || name === 'dmesg') {
+      return '이 명령으로 무엇을 확인하는지: 커널/시스템 로그.';
+    }
+    if (name === 'brctl') {
+      return '이 명령으로 무엇을 확인하는지: 브리지와 묶인 포트.';
+    }
+    if (name === 'uptime' || name === 'free' || name === 'df') {
+      return '이 명령으로 무엇을 확인하는지: 부하, 메모리, 디스크.';
+    }
+    if (command) {
+      return '이 명령으로 무엇을 확인하는지: (시험 모드라 일반 설명만 합니다. 유료 API 를 붙이면 출력을 해석합니다.)';
+    }
+    return '이 명령으로 무엇을 확인하는지: 명령을 찾지 못했습니다. ifconfig 버튼을 눌러 보세요.';
+  }
+
+  function guessCommand(logText) {
+    const lines = String(logText || '').split(/\n/);
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      const hashed = line.match(/#\s*([A-Za-z][A-Za-z0-9._\/-]*(?:\s+[A-Za-z0-9._\/-]+)*)$/);
+      if (hashed) {
+        return hashed[1].trim();
+      }
+    }
+    return '';
+  }
+
+  function readIfconfigFacts(logText) {
+    const facts = [];
+    const blocks = String(logText || '').split(/\n(?=\S+\s+Link encap)/);
+    for (const block of blocks) {
+      const nameMatch = block.match(/^(\S+)\s+Link encap/m);
+      if (!nameMatch) {
+        continue;
+      }
+      const name = nameMatch[1];
+      const ipMatch = block.match(/inet addr:(\d+\.\d+\.\d+\.\d+)/);
+      const rxErr = block.match(/RX packets:\d+\s+errors:(\d+)/);
+      const up = /\bUP\b/.test(block);
+      const parts = [name];
+      parts.push(up ? 'UP' : 'DOWN/미확인');
+      if (ipMatch) {
+        parts.push('IP ' + ipMatch[1]);
+      }
+      if (rxErr) {
+        parts.push('RX errors ' + rxErr[1]);
+      }
+      facts.push(parts.join(', '));
+    }
+    return facts.slice(0, 8);
   }
 
   async function requestChat(settings, userText) {
@@ -181,6 +283,7 @@
     hasEndpoint: hasEndpoint,
     configError: configError,
     analyzePane: analyzePane,
+    isTrialMode: isTrialMode,
     maxLogLines: MAX_LOG_LINES,
   };
 })(window);

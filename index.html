@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261102b" />
+    <link rel="stylesheet" href="./src/style.css?v=20261102c" />
   </head>
   <body>
     <div id="app">
@@ -241,49 +241,52 @@
           </form>
         </aside>
         <aside id="llm-panel" class="chat-panel llm-panel">
-          <div class="chat-header">로그 분석 · 시험</div>
+          <div class="chat-header">로그 분석 · 화면 읽기 시험</div>
           <div class="llm-settings">
-            <label>
-              API 주소
-              <input
-                id="txt-llm-endpoint"
-                type="text"
-                spellcheck="false"
-                placeholder="https://api.openai.com/v1/chat/completions"
-                autocomplete="off"
-              />
-            </label>
-            <label>
-              모델
-              <input
-                id="txt-llm-model"
-                type="text"
-                spellcheck="false"
-                placeholder="gpt-4o-mini"
-                autocomplete="off"
-              />
-            </label>
-            <label>
-              API 키
-              <input
-                id="txt-llm-key"
-                type="password"
-                spellcheck="false"
-                placeholder="이 브라우저에만 저장"
-                autocomplete="off"
-              />
-            </label>
+            <p class="llm-trial-note">지금은 유료 API 없이, 화면 로그를 읽었는지만 확인합니다.</p>
             <label class="checkbox">
               <input id="chk-llm-after-command" type="checkbox" checked />
               명령 후 자동 분석
             </label>
+            <details class="llm-api-details">
+              <summary>유료 API (지금은 접어둠)</summary>
+              <label>
+                API 주소
+                <input
+                  id="txt-llm-endpoint"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="비워 두면 화면 읽기 시험"
+                  autocomplete="off"
+                />
+              </label>
+              <label>
+                모델
+                <input
+                  id="txt-llm-model"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="gpt-4o-mini"
+                  autocomplete="off"
+                />
+              </label>
+              <label>
+                API 키
+                <input
+                  id="txt-llm-key"
+                  type="password"
+                  spellcheck="false"
+                  placeholder="이 브라우저에만 저장"
+                  autocomplete="off"
+                />
+              </label>
+            </details>
           </div>
           <div id="llm-result" class="llm-result"></div>
           <div class="side-empty" id="llm-empty">
-            <p class="side-empty-title">로그 분석</p>
+            <p class="side-empty-title">화면 읽기 시험</p>
             <p class="side-empty-live">
-              API 주소·모델을 넣고 ifconfig 를 친 뒤 [이 칸 분석] 을 누르세요.
-              장비로는 명령을 보내지 않습니다.
+              ifconfig 를 친 뒤 [이 칸 분석] 을 누르세요. 결제 없이 콘솔 줄이 이 칸으로 오는지 확인합니다.
             </p>
           </div>
           <div class="chat-form llm-actions">
@@ -334,8 +337,8 @@
     <script src="./src/share.js?v=20261030g"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20261030h"></script>
-    <script src="./src/llm-analyze.js?v=20261102a"></script>
+    <script src="./src/llm-analyze.js?v=20261102c"></script>
     <script src="./src/console-pane.js?v=20261102a"></script>
-    <script src="./src/main.js?v=20261102a"></script>
+    <script src="./src/main.js?v=20261102c"></script>
   </body>
 </html>

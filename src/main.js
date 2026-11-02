@@ -965,7 +965,10 @@ function runLlmAnalyze(pane) {
   if (els.llmAnalyze) {
     els.llmAnalyze.disabled = true;
   }
-  showLlmResult('분석 중… 화면 로그를 모델에 보냅니다.', false);
+  const waiting = LlmAnalyze.isTrialMode(settings)
+    ? '화면을 읽는 중… (유료 API 없음)'
+    : '분석 중… 화면 로그를 모델에 보냅니다.';
+  showLlmResult(waiting, false);
 
   LlmAnalyze.analyzePane(pane, settings)
     .then((text) => {
