@@ -45,30 +45,6 @@ body {
   overflow: hidden;
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px 8px;
-  flex-shrink: 0;
-  background: #14181c;
-  border-bottom: 1px solid var(--toolbar-border);
-}
-
-.app-brand h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.app-brand p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .app-chrome {
   flex-shrink: 0;
   background: #1a1e22;
@@ -1019,10 +995,6 @@ body {
     flex: 1;
   }
 
-  .guest-app .app-header {
-    padding: 8px 10px 6px;
-  }
-
   .guest-app .workspace {
     flex-direction: column;
     flex: 1 1 auto;
@@ -1065,10 +1037,6 @@ body {
     background: var(--toolbar-bg);
     border-top: 1px solid var(--toolbar-border);
     border-bottom: 0;
-  }
-
-  .guest-app .app-header {
-    order: 0;
   }
 
   .guest-app .app-chrome {
