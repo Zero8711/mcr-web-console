@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>웹 시리얼 콘솔</title>
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261102a" />
+    <link rel="stylesheet" href="./src/style.css?v=20261102b" />
   </head>
   <body>
     <div id="app">
@@ -240,6 +240,56 @@
             <button type="submit" class="btn" disabled>보내기</button>
           </form>
         </aside>
+        <aside id="llm-panel" class="chat-panel llm-panel">
+          <div class="chat-header">로그 분석 · 시험</div>
+          <div class="llm-settings">
+            <label>
+              API 주소
+              <input
+                id="txt-llm-endpoint"
+                type="text"
+                spellcheck="false"
+                placeholder="https://api.openai.com/v1/chat/completions"
+                autocomplete="off"
+              />
+            </label>
+            <label>
+              모델
+              <input
+                id="txt-llm-model"
+                type="text"
+                spellcheck="false"
+                placeholder="gpt-4o-mini"
+                autocomplete="off"
+              />
+            </label>
+            <label>
+              API 키
+              <input
+                id="txt-llm-key"
+                type="password"
+                spellcheck="false"
+                placeholder="이 브라우저에만 저장"
+                autocomplete="off"
+              />
+            </label>
+            <label class="checkbox">
+              <input id="chk-llm-after-command" type="checkbox" checked />
+              명령 후 자동 분석
+            </label>
+          </div>
+          <div id="llm-result" class="llm-result"></div>
+          <div class="side-empty" id="llm-empty">
+            <p class="side-empty-title">로그 분석</p>
+            <p class="side-empty-live">
+              API 주소·모델을 넣고 ifconfig 를 친 뒤 [이 칸 분석] 을 누르세요.
+              장비로는 명령을 보내지 않습니다.
+            </p>
+          </div>
+          <div class="chat-form llm-actions">
+            <button id="btn-llm-analyze" type="button" class="btn btn-primary">이 칸 분석</button>
+          </div>
+        </aside>
         <aside id="cmd-panel" class="chat-panel cmd-panel idle">
           <div class="chat-header">명령 기록</div>
           <div id="cmd-log" class="chat-log"></div>
@@ -284,7 +334,8 @@
     <script src="./src/share.js?v=20261030g"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20261030h"></script>
-    <script src="./src/console-pane.js?v=20261030h"></script>
-    <script src="./src/main.js?v=20261030g"></script>
+    <script src="./src/llm-analyze.js?v=20261102a"></script>
+    <script src="./src/console-pane.js?v=20261102a"></script>
+    <script src="./src/main.js?v=20261102a"></script>
   </body>
 </html>

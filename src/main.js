@@ -59,6 +59,13 @@ const els = {
   alertLine: document.getElementById('alert-modal-line'),
   alertFile: document.getElementById('alert-modal-file'),
   alertOk: document.getElementById('btn-alert-ok'),
+  llmPanel: document.getElementById('llm-panel'),
+  llmEndpoint: document.getElementById('txt-llm-endpoint'),
+  llmModel: document.getElementById('txt-llm-model'),
+  llmKey: document.getElementById('txt-llm-key'),
+  llmAfterCommand: document.getElementById('chk-llm-after-command'),
+  llmResult: document.getElementById('llm-result'),
+  llmAnalyze: document.getElementById('btn-llm-analyze'),
 };
 
 const PAGE_TITLE = document.title;
@@ -123,6 +130,7 @@ function paneHooks() {
     onPaste: (pane) => pasteFromClipboard(pane),
     onShareLog: (pane, text) => shareClient?.sendLog(text, pane.id),
     onShareCmdLog: (pane, text) => shareClient?.sendCmdLog(text, pane.id),
+    onCommandSent: (pane) => scheduleLlmAnalyze(pane),
     onMetaChange: (pane) => {
       broadcastConsoles();
       if (pane === currentPane()) {
@@ -470,6 +478,7 @@ els.clear.addEventListener('click', () => {
 });
 
 bindQuickCommands();
+bindLlmAnalyze();
 updateSharePasswordHint();
 
 els.shareStart.addEventListener('click', () => {
@@ -877,6 +886,108 @@ function sendConsoleCommand(command, options) {
     els.customCommand.value = '';
   }
   pane.focus();
+}
+
+const llmAnalyzeTimers = {};
+let llmAnalyzeBusy = false;
+
+function bindLlmAnalyze() {
+  if (!els.llmPanel || typeof LlmAnalyze === 'undefined') {
+    return;
+  }
+
+  const saved = LlmAnalyze.loadSettings();
+  if (els.llmEndpoint) {
+    els.llmEndpoint.value = saved.endpoint;
+  }
+  if (els.llmModel) {
+    els.llmModel.value = saved.model;
+  }
+  if (els.llmKey) {
+    els.llmKey.value = saved.apiKey;
+  }
+  if (els.llmAfterCommand) {
+    els.llmAfterCommand.checked = saved.afterCommand;
+  }
+
+  const persist = () => {
+    LlmAnalyze.saveSettings(readLlmSettingsFromForm());
+  };
+
+  els.llmEndpoint?.addEventListener('change', persist);
+  els.llmModel?.addEventListener('change', persist);
+  els.llmKey?.addEventListener('change', persist);
+  els.llmAfterCommand?.addEventListener('change', persist);
+  els.llmAnalyze?.addEventListener('click', () => {
+    runLlmAnalyze(currentPane());
+  });
+}
+
+function readLlmSettingsFromForm() {
+  return {
+    endpoint: String(els.llmEndpoint?.value || '').trim(),
+    model: String(els.llmModel?.value || '').trim(),
+    apiKey: String(els.llmKey?.value || '').trim(),
+    afterCommand: Boolean(els.llmAfterCommand?.checked),
+  };
+}
+
+function scheduleLlmAnalyze(pane) {
+  if (!pane || !els.llmAfterCommand?.checked) {
+    return;
+  }
+
+  const settings = readLlmSettingsFromForm();
+  if (LlmAnalyze.configError(settings)) {
+    return;
+  }
+
+  const id = pane.id;
+  if (llmAnalyzeTimers[id]) {
+    clearTimeout(llmAnalyzeTimers[id]);
+  }
+
+  llmAnalyzeTimers[id] = setTimeout(() => {
+    llmAnalyzeTimers[id] = null;
+    runLlmAnalyze(pane);
+  }, 3000);
+}
+
+function runLlmAnalyze(pane) {
+  if (!els.llmResult || llmAnalyzeBusy) {
+    return;
+  }
+
+  const settings = readLlmSettingsFromForm();
+  LlmAnalyze.saveSettings(settings);
+
+  llmAnalyzeBusy = true;
+  if (els.llmAnalyze) {
+    els.llmAnalyze.disabled = true;
+  }
+  showLlmResult('분석 중… 화면 로그를 모델에 보냅니다.', false);
+
+  LlmAnalyze.analyzePane(pane, settings)
+    .then((text) => {
+      showLlmResult(text, false);
+    })
+    .catch((err) => {
+      showLlmResult(err.message || String(err), true);
+    })
+    .finally(() => {
+      llmAnalyzeBusy = false;
+      if (els.llmAnalyze) {
+        els.llmAnalyze.disabled = false;
+      }
+    });
+}
+
+function showLlmResult(text, isError) {
+  if (!els.llmResult) {
+    return;
+  }
+  els.llmResult.textContent = text || '';
+  els.llmResult.classList.toggle('llm-error', Boolean(isError) && Boolean(text));
 }
 
 function sendHostChat(text) {

@@ -42,6 +42,7 @@
           : null;
       this.sessionLog = new SessionLogRecorder();
       this.typedLines = new ShareUtil.TypedLineBuffer();
+      this.lastCommand = '';
 
       this.root = document.createElement('section');
       this.root.className = 'console-pane';
@@ -459,6 +460,7 @@
       if (!body) {
         return;
       }
+      this.noteLastCommand(body);
       this.writeRaw(`${body}\n`);
     }
 
@@ -476,8 +478,44 @@
     collectTyped(chunk) {
       const lines = this.typedLines.push(chunk);
       for (const line of lines) {
+        this.noteLastCommand(line);
         this.hooks.onShareCmdLog?.(this, line);
       }
+    }
+
+    noteLastCommand(command) {
+      const body = stripHangulForConsole(command).trim();
+      if (!body) {
+        return;
+      }
+      this.lastCommand = body;
+      this.hooks.onCommandSent?.(this, body);
+    }
+
+    /**
+     * 화면에 보이는 최근 줄을 텍스트로 모은다. LLM 분석용.
+     */
+    getRecentLog(maxLines) {
+      const buf = this.term?.buffer?.active;
+      if (!buf) {
+        return '';
+      }
+
+      const limit = Math.max(1, Number(maxLines) || 80);
+      const start = Math.max(0, buf.length - limit);
+      const lines = [];
+
+      for (let i = start; i < buf.length; i += 1) {
+        const line = buf.getLine(i);
+        const text = line ? line.translateToString(true).replace(/\s+$/g, '') : '';
+        lines.push(text);
+      }
+
+      while (lines.length && !lines[lines.length - 1]) {
+        lines.pop();
+      }
+
+      return lines.join('\n');
     }
 
     async connect() {

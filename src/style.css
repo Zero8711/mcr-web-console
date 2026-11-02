@@ -701,6 +701,77 @@ body {
   width: 248px;
 }
 
+.llm-panel {
+  width: 280px;
+}
+
+.llm-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--toolbar-border);
+  flex-shrink: 0;
+}
+
+.llm-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.llm-settings input[type='text'],
+.llm-settings input[type='password'] {
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.llm-settings .checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.llm-result {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.llm-result:empty {
+  display: none;
+}
+
+.llm-result:empty ~ .side-empty {
+  display: flex;
+}
+
+.llm-result.llm-error {
+  color: #ffd6d6;
+}
+
+.llm-actions {
+  justify-content: flex-end;
+}
+
+.llm-actions .btn {
+  width: 100%;
+}
+
 .side-empty {
   display: none;
   flex: 1;
