@@ -484,6 +484,9 @@ els.clear.addEventListener('click', () => {
 
 bindQuickCommands();
 bindLlmAnalyze();
+if (typeof PanelResize !== 'undefined') {
+  PanelResize.bind(document.querySelector('.workspace'));
+}
 updateSharePasswordHint();
 
 els.shareStart.addEventListener('click', () => {

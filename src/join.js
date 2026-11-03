@@ -185,6 +185,9 @@ window.addEventListener('resize', fitAllPanes);
 window.visualViewport?.addEventListener('resize', fitAllPanes);
 
 bindQuickCommands();
+if (typeof PanelResize !== 'undefined') {
+  PanelResize.bind(document.querySelector('.workspace'));
+}
 applyGuestPerm(false);
 restoreGuestName();
 refreshJoinButton();

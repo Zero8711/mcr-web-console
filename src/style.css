@@ -697,6 +697,31 @@ body {
   position: relative;
 }
 
+.panel-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resizer:hover,
+.panel-resizer.dragging {
+  background: rgba(74, 216, 154, 0.35);
+}
+
+body.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.panel-resizing .xterm {
+  pointer-events: none;
+}
+
 .cmd-panel {
   width: 248px;
 }
