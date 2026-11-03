@@ -22,7 +22,8 @@
     '화면에 있는 이름과 숫자만 쓰세요. 없는 값은 추측하지 마세요.\n' +
     '화면 출력을 그대로 다시 붙이지 마세요. 번호 목록을 비워 두지 마세요.\n' +
     '질문이 없으면 다른 명령을 제안하지 마세요.\n' +
-    '질문이 있으면 그 질문에 먼저 답하고, 화면을 근거로 설명하세요.';
+    '질문이 있으면 그 질문에 먼저 답하고, 화면을 근거로 설명하세요.\n' +
+    '아래에 붙은 화면만 이번 명령 결과입니다. 다른 명령 결과를 끌어오지 마세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
@@ -130,13 +131,13 @@
 
     const ask = String(question || '').trim();
     const hint = options || {};
-    const probeFacts = await maybeProbeDevice(pane, ask, hint);
     let logText = pane.getRecentLog(MAX_LOG_LINES);
     if (!logText.trim()) {
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
     }
     const command = pickCommand(pane, logText);
-    logText = logSinceCommand(logText, command);
+    logText = clipAnalysisLog(logText, command);
+    const probeFacts = await maybeProbeDevice(pane, ask, hint);
 
     if (!isTrialMode(settings)) {
       const answer = await requestChat(settings, buildUserText(pane, logText, ask, probeFacts, command));
@@ -189,7 +190,7 @@
       userText += '화면을 근거로 한국어로 답하세요. 화면을 그대로 복사하지 마세요.';
     } else {
       userText +=
-        '이 화면을 한국어로 설명하세요.\n' +
+        '아래는 이번 명령의 결과만입니다. 이전 명령은 없다고 생각하고 설명하세요.\n' +
         '- 이 출력이 무엇을 보여 주는지\n' +
         '- 지금 화면에서 확인할 수 있는 값(이름, IP, 링크, 포트, 에러 등)\n' +
         '화면 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.';
@@ -342,17 +343,10 @@
   }
 
   /**
-   * 분석마다 새 대화를 연다. 같은 세션을 재쓰면 이전 CPU 질문 등이 섞인다.
+   * 분석마다 새 대화를 연다. clone 은 이전 턴이 섞일 수 있어 쓰지 않는다.
    */
   async function openChromeTurn(options) {
-    const base = await getChromeSession(options);
-    if (base && typeof base.clone === 'function') {
-      try {
-        return await base.clone();
-      } catch {
-        // clone 이 없으면 아래 create 로 간다.
-      }
-    }
+    await getChromeSession(options);
     return LanguageModel.create({
       initialPrompts: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -580,18 +574,74 @@
     return facts;
   }
 
-  function logSinceCommand(logText, command) {
-    const needle = String(command || '').trim();
-    const lines = String(logText || '').split(/\n/);
-    if (!needle) {
-      return logText;
+  /**
+   * 이번 명령 출력만 남긴다. pwd/busybox 확인 출력과 이전 명령은 뺀다.
+   */
+  function clipAnalysisLog(logText, command) {
+    const cleaned = stripProbeBlocks(String(logText || ''));
+    const lines = cleaned.split(/\n/);
+    const start = findLastCommandLine(lines, command);
+    const from = start >= 0 ? start : Math.max(0, lines.length - 20);
+    const clipped = lines.slice(from, from + 35);
+    while (clipped.length && !clipped[clipped.length - 1]) {
+      clipped.pop();
     }
+    return clipped.join('\n');
+  }
+
+  function stripProbeBlocks(logText) {
+    const lines = String(logText || '').split(/\n/);
+    const kept = [];
+    let skipping = false;
+    const probeCmd = typeof DutProbe !== 'undefined' ? String(DutProbe.command || '') : '';
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const isProbeStart = (probeCmd && line.indexOf(probeCmd) >= 0)
+        || (line.indexOf('--PATH--') >= 0 && line.indexOf('pwd') >= 0)
+        || (line.indexOf('echo --PATH--') >= 0);
+
+      if (!skipping && isProbeStart) {
+        skipping = true;
+        continue;
+      }
+      if (skipping) {
+        if (isUserPromptLine(line) && line.indexOf('--PATH--') < 0 && line.indexOf('busybox --list') < 0) {
+          skipping = false;
+          kept.push(line);
+        }
+        continue;
+      }
+      kept.push(line);
+    }
+    return kept.join('\n');
+  }
+
+  function findLastCommandLine(lines, command) {
+    const needle = String(command || '').trim();
+    if (!needle) {
+      return -1;
+    }
+    const compact = needle.replace(/\s+/g, ' ');
+    const tail = compact.length > 40 ? compact.slice(-40) : compact;
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-      if (lines[i].indexOf(needle) >= 0) {
-        return lines.slice(i).join('\n');
+      const line = String(lines[i] || '').replace(/\s+/g, ' ');
+      if (line.indexOf(compact) >= 0 || (tail && line.indexOf(tail) >= 0)) {
+        return i;
       }
     }
-    return logText;
+    return -1;
+  }
+
+  function isUserPromptLine(line) {
+    const text = String(line || '').replace(/\s+$/g, '');
+    if (!text || text.length > 180) {
+      return false;
+    }
+    if (/@/.test(text) && /[#\$]/.test(text)) {
+      return true;
+    }
+    return /[#\$]\s*$/.test(text) && /[\/~:]/.test(text);
   }
 
   async function requestChat(settings, userText) {
