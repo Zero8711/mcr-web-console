@@ -3,13 +3,14 @@
  * API 키가 없으면 Chrome 내장 AI(Gemini Nano)를 먼저 쓰고,
  * 그 브라우저/PC에서 못 쓰면 화면 읽기 시험으로 떨어진다.
  * 키를 넣으면 OpenAI 호환 chat/completions 을 부른다.
- * 장비로는 명령을 보내지 않는다.
+ * 질문·분석 때는 장비에 pwd 와 명령 목록만 보내 확인한다.
  */
 (function (global) {
   const ENDPOINT_KEY = 'llm-endpoint';
   const MODEL_KEY = 'llm-model';
   const API_KEY_KEY = 'llm-api-key';
   const AFTER_CMD_KEY = 'llm-after-command';
+  const PROBE_KEY = 'llm-probe-device';
   const MAX_LOG_LINES = 80;
   const CHROME_NEED_CLICK = 'CHROME_AI_NEED_CLICK';
   const CHROME_UNAVAILABLE = 'CHROME_AI_UNAVAILABLE';
@@ -23,8 +24,11 @@
     '3) 출력에서 눈에 띄는 정보(인터페이스, IP, 링크, 에러 카운터 등)\n' +
     '화면에 없는 값은 추측이라고 밝히세요. ' +
     '시험자 질문이 있으면 그 질문에 먼저 답하세요. ' +
-    '장비에 보낼 명령은 제안만 하고, 실행했다고 말하지 마세요. ' +
-    '영어 로그 값(인터페이스 이름, IP, 카운터)은 그대로 두세요.';
+    '장비에서 확인한 현재 경로·파일·명령 목록이 있으면 그 목록에 있는 것만 추천하세요. ' +
+    '목록에 없는 명령은 이 장비에서 확인되지 않았다고 말하세요. ' +
+    '재부팅 명령은 시험자가 묻기 전에는 권하지 마세요. ' +
+    '경로 확인용 pwd 는 이미 보냈을 수 있습니다. 그 외 명령을 실행했다고 말하지 마세요. ' +
+    '영어 로그 값(인터페이스 이름, IP, 카운터, 파일 이름)은 그대로 두세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
@@ -36,6 +40,7 @@
       model: readStore(MODEL_KEY) || '',
       apiKey: readStore(API_KEY_KEY) || '',
       afterCommand: readStore(AFTER_CMD_KEY) !== '0',
+      probeDevice: readStore(PROBE_KEY) !== '0',
     };
   }
 
@@ -44,6 +49,7 @@
     writeStore(MODEL_KEY, settings.model || '');
     writeStore(API_KEY_KEY, settings.apiKey || '');
     writeStore(AFTER_CMD_KEY, settings.afterCommand ? '1' : '0');
+    writeStore(PROBE_KEY, settings.probeDevice === false ? '0' : '1');
   }
 
   function hasEndpoint(settings) {
@@ -128,16 +134,16 @@
       throw new Error('분석할 콘솔이 없습니다.');
     }
 
-    const logText = pane.getRecentLog(MAX_LOG_LINES);
-    if (!logText.trim()) {
-      throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 ifconfig 를 먼저 치세요.');
-    }
-
     const ask = String(question || '').trim();
     const hint = options || {};
+    const probeFacts = await maybeProbeDevice(pane, ask, hint);
+    let logText = pane.getRecentLog(MAX_LOG_LINES);
+    if (!logText.trim()) {
+      throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
+    }
 
     if (!isTrialMode(settings)) {
-      const answer = await requestChat(settings, buildUserText(pane, logText, ask));
+      const answer = await requestChat(settings, buildUserText(pane, logText, ask, probeFacts));
       if (!answer) {
         throw new Error('모델이 빈 답을 돌려줬습니다.');
       }
@@ -146,23 +152,38 @@
 
     if (hasChromePromptApi()) {
       try {
-        return await explainWithChromeAi(pane, logText, ask, hint);
+        return await explainWithChromeAi(pane, logText, ask, hint, probeFacts);
       } catch (err) {
         const code = err && err.message;
         if (code === CHROME_UNAVAILABLE || code === CHROME_NEED_CLICK) {
-          return explainFromScreen(pane, logText, ask);
+          return explainFromScreen(pane, logText, ask, probeFacts);
         }
         throw new Error(toChromeError(err));
       }
     }
 
-    return explainFromScreen(pane, logText, ask);
+    return explainFromScreen(pane, logText, ask, probeFacts);
   }
 
-  function buildUserText(pane, logText, question) {
+  async function maybeProbeDevice(pane, question, options) {
+    if (!options || !options.probe || typeof DutProbe === 'undefined') {
+      return null;
+    }
+    if (typeof options.onStatus === 'function') {
+      options.onStatus('장비에서 경로와 명령을 확인하는 중…');
+    }
+    try {
+      return await DutProbe.probe(pane, { question: question });
+    } catch (err) {
+      return { skipped: 'error', message: err && err.message ? err.message : String(err) };
+    }
+  }
+
+  function buildUserText(pane, logText, question, probeFacts) {
     let userText =
       '장비: ' + (pane.title || '콘솔') + '\n' +
       '마지막 명령: ' + (pane.lastCommand || '(화면에서 추정)') + '\n\n' +
+      formatProbeFacts(probeFacts) +
       '화면:\n' +
       logText;
     if (question) {
@@ -171,13 +192,44 @@
     return userText;
   }
 
-  async function explainWithChromeAi(pane, logText, question, options) {
+  function formatProbeFacts(facts) {
+    if (!facts) {
+      return '';
+    }
+    if (facts.skipped) {
+      const why = typeof DutProbe !== 'undefined' ? DutProbe.skipLabel(facts) : '';
+      return '장비 확인: 못 함. ' + (why || facts.skipped) + ' 화면만 보고 답하고, 없는 명령은 추측하지 마세요.\n\n';
+    }
+
+    const lines = ['장비에서 직접 확인한 값:'];
+    lines.push('현재 경로: ' + (facts.cwd || '(모름)'));
+    if (facts.path) {
+      lines.push('PATH: ' + facts.path);
+    }
+    if (facts.files && facts.files.length) {
+      lines.push('이 경로의 이름: ' + facts.files.join(', '));
+    }
+    if (facts.commands && facts.commands.length) {
+      lines.push('이 장비에서 확인된 명령: ' + facts.commands.join(', '));
+    }
+    if (!facts.commands || !facts.commands.length || (facts.allCount || 0) <= 8) {
+      lines.push('busybox --list 를 못 읽었을 수 있습니다. 확인된 명령만 추천하세요.');
+    }
+    lines.push('위 목록에 있는 명령만 추천하세요. 없으면 이 장비에서 확인되지 않았다고 하세요.');
+    lines.push('');
+    return lines.join('\n') + '\n';
+  }
+
+  async function explainWithChromeAi(pane, logText, question, options, probeFacts) {
     const session = await getChromeSession(options);
-    const answer = String(await session.prompt(buildUserText(pane, logText, question)) || '').trim();
+    const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts)) || '').trim();
     if (!answer) {
       throw new Error('Chrome 내장 AI 가 빈 답을 돌려줬습니다.');
     }
-    return '[Chrome 내장 AI · Gemini Nano]\n\n' + answer;
+    const tag = probeFacts && !probeFacts.skipped
+      ? '[Chrome 내장 AI · 장비 경로 확인]'
+      : '[Chrome 내장 AI · Gemini Nano]';
+    return tag + '\n\n' + answer;
   }
 
   function addChromeProgress(onProgress) {
@@ -291,7 +343,7 @@
    * 유료 API / Chrome 내장 AI 없이, 화면 텍스트를 읽었는지만 확인한다.
    * ifconfig 출력에서 IP·인터페이스는 실제로 뽑아 보여 준다.
    */
-  function explainFromScreen(pane, logText, question) {
+  function explainFromScreen(pane, logText, question, probeFacts) {
     const command = pickCommand(pane, logText);
     const help = commandHelp(command);
     const facts = command.toLowerCase().indexOf('ifconfig') >= 0
@@ -306,6 +358,15 @@
       '1) 마지막 명령: ' + (command || '(화면에서 명령을 찾지 못했습니다)'),
       '2) ' + help,
     ];
+
+    if (probeFacts && !probeFacts.skipped) {
+      lines.push('현재 경로: ' + (probeFacts.cwd || '(모름)'));
+      if (probeFacts.commands && probeFacts.commands.length) {
+        lines.push('이 장비에서 확인된 명령: ' + probeFacts.commands.join(', '));
+      }
+    } else if (probeFacts && probeFacts.skipped && typeof DutProbe !== 'undefined') {
+      lines.push(DutProbe.skipLabel(probeFacts));
+    }
 
     if (facts.length) {
       lines.push('3) 화면에서 읽은 값:');

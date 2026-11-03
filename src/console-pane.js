@@ -43,6 +43,9 @@
       this.sessionLog = new SessionLogRecorder();
       this.typedLines = new ShareUtil.TypedLineBuffer();
       this.lastCommand = '';
+      this.rxListeners = [];
+      this.commandFacts = null;
+      this.probeBusy = null;
 
       this.root = document.createElement('section');
       this.root.className = 'console-pane';
@@ -246,6 +249,26 @@
       this.sessionLog.ingest(text);
     }
 
+    addRxListener(fn) {
+      if (typeof fn !== 'function') {
+        return;
+      }
+      if (this.rxListeners.indexOf(fn) < 0) {
+        this.rxListeners.push(fn);
+      }
+    }
+
+    removeRxListener(fn) {
+      this.rxListeners = this.rxListeners.filter((item) => item !== fn);
+    }
+
+    notifyRx(text) {
+      const list = this.rxListeners.slice();
+      for (let i = 0; i < list.length; i += 1) {
+        list[i](text);
+      }
+    }
+
     copySelection() {
       const text = this.term.getSelection();
       if (!text) {
@@ -380,6 +403,7 @@
         this.writeIncoming(text);
         this.agingLog.ingest(text);
         this.hooks.onShareLog?.(this, text);
+        this.notifyRx(text);
       };
 
       this.serial.onError = (err) => {
@@ -455,12 +479,14 @@
       });
     }
 
-    writeLine(text) {
+    writeLine(text, options) {
       const body = stripHangulForConsole(text);
       if (!body) {
         return;
       }
-      this.noteLastCommand(body);
+      if (!options || !options.quiet) {
+        this.noteLastCommand(body);
+      }
       this.writeRaw(`${body}\n`);
     }
 
@@ -487,6 +513,9 @@
       const body = stripHangulForConsole(command).trim();
       if (!body) {
         return;
+      }
+      if (/^cd(\s|$)/.test(body) || /^export\s+PATH=/.test(body)) {
+        this.commandFacts = null;
       }
       this.lastCommand = body;
       this.hooks.onCommandSent?.(this, body);

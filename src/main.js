@@ -64,6 +64,7 @@ const els = {
   llmModel: document.getElementById('txt-llm-model'),
   llmKey: document.getElementById('txt-llm-key'),
   llmAfterCommand: document.getElementById('chk-llm-after-command'),
+  llmProbeDevice: document.getElementById('chk-llm-probe-device'),
   llmLog: document.getElementById('llm-log'),
   llmAnalyze: document.getElementById('btn-llm-analyze'),
   llmQuestion: document.getElementById('txt-llm-question'),
@@ -918,6 +919,9 @@ function bindLlmAnalyze() {
   if (els.llmAfterCommand) {
     els.llmAfterCommand.checked = saved.afterCommand;
   }
+  if (els.llmProbeDevice) {
+    els.llmProbeDevice.checked = saved.probeDevice !== false;
+  }
 
   const persist = () => {
     LlmAnalyze.saveSettings(readLlmSettingsFromForm());
@@ -930,6 +934,7 @@ function bindLlmAnalyze() {
     refreshLlmChromeNote();
   });
   els.llmAfterCommand?.addEventListener('change', persist);
+  els.llmProbeDevice?.addEventListener('change', persist);
   els.llmAnalyze?.addEventListener('click', () => {
     runLlmAnalyze(currentPane(), readLlmQuestion(), true, 'button');
   });
@@ -1030,6 +1035,7 @@ function readLlmSettingsFromForm() {
     model: String(els.llmModel?.value || '').trim(),
     apiKey: String(els.llmKey?.value || '').trim(),
     afterCommand: Boolean(els.llmAfterCommand?.checked),
+    probeDevice: els.llmProbeDevice ? Boolean(els.llmProbeDevice.checked) : true,
   };
 }
 
@@ -1087,8 +1093,11 @@ function runLlmAnalyze(pane, question, allowDownload, source) {
     els.llmAsk.disabled = true;
   }
 
+  const shouldProbe = source !== 'auto' && settings.probeDevice !== false;
   let waiting = '분석 중… 화면 로그를 모델에 보냅니다.';
-  if (LlmAnalyze.isTrialMode(settings)) {
+  if (shouldProbe) {
+    waiting = '장비에서 경로와 명령을 확인하는 중…';
+  } else if (LlmAnalyze.isTrialMode(settings)) {
     waiting = canDownload && LlmAnalyze.hasChromePromptApi()
       ? 'Chrome 내장 AI 에 묻는 중…'
       : '화면을 읽는 중… (Chrome 내장 AI / 유료 API 없음)';
@@ -1101,6 +1110,10 @@ function runLlmAnalyze(pane, question, allowDownload, source) {
 
   LlmAnalyze.analyzePane(pane, settings, ask, {
     allowDownload: canDownload,
+    probe: shouldProbe,
+    onStatus: (text) => {
+      updateLlmPending(text, false);
+    },
     onProgress: (loaded) => {
       const pct = Math.round(Math.min(1, Math.max(0, Number(loaded) || 0)) * 100);
       updateLlmPending('Chrome 내장 모델 받는 중… ' + pct + '%', false);
