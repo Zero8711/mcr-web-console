@@ -17,19 +17,15 @@
 
   const SYSTEM_PROMPT =
     '당신은 AP/라우터 시리얼 콘솔을 보는 시험 조수입니다. ' +
-    '한국어로 짧게 답하세요.\n' +
-    '이번 메시지의 화면과 마지막 명령만 보세요. 이전 질문은 무시하세요.\n' +
-    '마지막 명령을 다른 명령으로 바꾸거나 지어내지 마세요.\n' +
-    '질문이 없으면 아래만 적으세요.\n' +
-    '1) 마지막 명령\n' +
-    '2) 이 명령이 확인하는 것\n' +
-    '3) 화면에 실제로 있는 값\n' +
-    '화면에 없는 값은 없다고 하세요. 새 명령을 제안하지 마세요.\n' +
+    '한국어로 답하세요. 번호 항목을 비워 두지 마세요.\n' +
+    '이번 메시지의 화면과 마지막 명령만 보세요.\n' +
+    '1) 마지막 명령: 사용자가 친 명령 문자열을 그대로 적으세요. 예: brctl show\n' +
+    '   브리지 이름이나 인터페이스 이름(br-lan, eth0)을 명령으로 적지 마세요.\n' +
+    '2) 이 명령이 확인하는 것을 한 문장으로 적으세요.\n' +
+    '3) 화면에 있는 값을 나열하세요. 브리지·포트·STP·IP 가 보이면 적으세요.\n' +
+    '화면에 없는 값만 없다고 하세요. 새 명령을 지어내지 마세요.\n' +
     '시험자 질문이 있으면 그 질문에 먼저 답하세요. ' +
-    '명령을 추천할 때는 이번 메시지에 적힌 장비 명령 목록에 있는 것만 쓰세요. ' +
-    '목록에 없는 명령, Cisco 스타일 명령, 영어 추정 명령은 쓰지 마세요. ' +
-    '재부팅은 시험자가 묻기 전에는 권하지 마세요. ' +
-    '영어 로그 값(브리지 이름, 인터페이스, IP, 파일 이름)은 그대로 두세요.';
+    '명령을 추천할 때는 이번 메시지에 적힌 장비 명령 목록에 있는 것만 쓰세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
@@ -142,9 +138,11 @@
     if (!logText.trim()) {
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
     }
+    const command = pickCommand(pane, logText);
+    logText = logSinceCommand(logText, command);
 
     if (!isTrialMode(settings)) {
-      const answer = await requestChat(settings, buildUserText(pane, logText, ask, probeFacts));
+      const answer = await requestChat(settings, buildUserText(pane, logText, ask, probeFacts, command));
       if (!answer) {
         throw new Error('모델이 빈 답을 돌려줬습니다.');
       }
@@ -153,7 +151,7 @@
 
     if (hasChromePromptApi()) {
       try {
-        return await explainWithChromeAi(pane, logText, ask, hint, probeFacts);
+        return await explainWithChromeAi(pane, logText, ask, hint, probeFacts, command);
       } catch (err) {
         const code = err && err.message;
         if (code === CHROME_UNAVAILABLE || code === CHROME_NEED_CLICK) {
@@ -180,16 +178,27 @@
     }
   }
 
-  function buildUserText(pane, logText, question, probeFacts) {
-    const command = pickCommand(pane, logText);
+  function buildUserText(pane, logText, question, probeFacts, command) {
+    const cmd = command || pickCommand(pane, logText);
+    const screenFacts = readScreenFacts(cmd, logText);
     let userText =
       '이전 대화는 무시하세요.\n' +
       '장비: ' + (pane.title || '콘솔') + '\n' +
-      '마지막 명령(이것을 분석하세요. 다른 명령을 만들지 마세요): ' +
-      (command || pane.lastCommand || '(화면에서 추정)') +
-      '\n\n';
+      '마지막 명령: ' + (cmd || '(화면에서 추정)') + '\n' +
+      commandHelp(cmd) + '\n\n';
+    if (screenFacts.length) {
+      userText += '화면에서 이미 읽은 값:\n';
+      for (let i = 0; i < screenFacts.length; i += 1) {
+        userText += '- ' + screenFacts[i] + '\n';
+      }
+      userText += '\n';
+    }
     if (!question) {
-      userText += '질문이 없습니다. 위 마지막 명령의 화면 출력만 설명하세요. 다른 명령을 제안하지 마세요.\n\n';
+      userText +=
+        '질문이 없습니다. 아래 형식으로 채우세요. 빈 줄을 두지 마세요.\n' +
+        '1) 마지막 명령: ' + (cmd || '') + '\n' +
+        '2) (한 문장)\n' +
+        '3) 화면에 있는 브리지/포트/값\n\n';
     }
     userText += formatProbeFacts(probeFacts, question);
     userText += '화면:\n' + logText;
@@ -228,14 +237,15 @@
     return lines.join('\n') + '\n';
   }
 
-  async function explainWithChromeAi(pane, logText, question, options, probeFacts) {
+  async function explainWithChromeAi(pane, logText, question, options, probeFacts, command) {
     const session = await openChromeTurn(options);
     const shouldDestroy = session !== chromeSession;
     try {
-      const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts)) || '').trim();
-      if (!answer) {
+      const raw = String(await session.prompt(buildUserText(pane, logText, question, probeFacts, command)) || '').trim();
+      if (!raw) {
         throw new Error('Chrome 내장 AI 가 빈 답을 돌려줬습니다.');
       }
+      const answer = fillThinAnswer(raw, command, readScreenFacts(command, logText));
       const tag = probeFacts && !probeFacts.skipped
         ? '[Chrome 내장 AI · 장비 경로 확인]'
         : '[Chrome 내장 AI · Gemini Nano]';
@@ -406,9 +416,10 @@
       lines.push(DutProbe.skipLabel(probeFacts));
     }
 
-    if (facts.length) {
+    const screenFacts = facts.length ? facts : readScreenFacts(command, logText);
+    if (screenFacts.length) {
       lines.push('3) 화면에서 읽은 값:');
-      for (const fact of facts) {
+      for (const fact of screenFacts) {
         lines.push('   - ' + fact);
       }
     } else {
@@ -502,6 +513,134 @@
       facts.push(parts.join(', '));
     }
     return facts.slice(0, 8);
+  }
+
+  function readScreenFacts(command, logText) {
+    const name = String(command || '').toLowerCase().split(/\s+/)[0];
+    if (name === 'ifconfig') {
+      return readIfconfigFacts(logText);
+    }
+    if (name === 'brctl') {
+      return readBrctlFacts(logText);
+    }
+    return [];
+  }
+
+  /**
+   * brctl show 표에서 브리지 이름과 묶인 포트를 뽑는다.
+   */
+  function readBrctlFacts(logText) {
+    const lines = String(logText || '').split(/\n/);
+    const bridges = [];
+    let current = null;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const raw = lines[i];
+      const line = raw.replace(/\s+$/g, '');
+      if (!line || /bridge name/i.test(line)) {
+        continue;
+      }
+      if (/[#\$]\s*$/.test(line) && /@|[\/~:]/.test(line)) {
+        continue;
+      }
+
+      if (/^\s+\S/.test(raw) && current) {
+        const extra = line.trim().split(/\s+/);
+        for (let j = 0; j < extra.length; j += 1) {
+          if (extra[j] && current.ifaces.indexOf(extra[j]) < 0) {
+            current.ifaces.push(extra[j]);
+          }
+        }
+        continue;
+      }
+
+      const parts = line.trim().split(/\s+/);
+      const name = parts[0];
+      if (!name || name === 'bridge' || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(name)) {
+        continue;
+      }
+
+      current = { name: name, stp: '', ifaces: [] };
+      for (let j = 1; j < parts.length; j += 1) {
+        const part = parts[j];
+        if (/^(yes|no)$/i.test(part)) {
+          current.stp = part.toLowerCase();
+          continue;
+        }
+        if (/^[0-9a-f]+\.[0-9a-f]+$/i.test(part)) {
+          continue;
+        }
+        if (j >= 2) {
+          current.ifaces.push(part);
+        }
+      }
+      bridges.push(current);
+    }
+
+    const facts = [];
+    for (let i = 0; i < bridges.length && facts.length < 8; i += 1) {
+      const item = bridges[i];
+      let text = item.name;
+      if (item.stp) {
+        text += ', STP ' + item.stp;
+      }
+      if (item.ifaces.length) {
+        text += ', ports ' + item.ifaces.join(', ');
+      }
+      facts.push(text);
+    }
+    return facts;
+  }
+
+  function logSinceCommand(logText, command) {
+    const needle = String(command || '').trim();
+    const lines = String(logText || '').split(/\n/);
+    if (!needle) {
+      return logText;
+    }
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (lines[i].indexOf(needle) >= 0) {
+        return lines.slice(i).join('\n');
+      }
+    }
+    return logText;
+  }
+
+  function fillThinAnswer(answer, command, facts) {
+    const text = String(answer || '');
+    if (!isThinAnswer(text) || !facts.length) {
+      return text;
+    }
+    const lines = [
+      '1) 마지막 명령: ' + (command || ''),
+      '2) ' + commandHelp(command),
+      '3) 화면에서 읽은 값:',
+    ];
+    for (let i = 0; i < facts.length; i += 1) {
+      lines.push('   - ' + facts[i]);
+    }
+    return lines.join('\n');
+  }
+
+  function isThinAnswer(answer) {
+    const lines = String(answer || '').split(/\n/);
+    let emptyNumbered = 0;
+    let numbered = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i].trim();
+      const match = line.match(/^([123])\)\s*(.*)$/);
+      if (!match) {
+        continue;
+      }
+      numbered += 1;
+      if (!String(match[2] || '').trim()) {
+        emptyNumbered += 1;
+      }
+    }
+    if (numbered >= 2 && emptyNumbered >= 1) {
+      return true;
+    }
+    return String(answer || '').replace(/\s+/g, '').length < 40;
   }
 
   async function requestChat(settings, userText) {
