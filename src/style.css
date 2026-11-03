@@ -768,27 +768,17 @@ body {
   margin-top: 6px;
 }
 
-.llm-result {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 12px;
-  font-size: 13px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
+.llm-panel .chat-bubble {
+  max-width: 92%;
 }
 
-.llm-result:empty {
-  display: none;
-}
-
-.llm-result:empty ~ .side-empty {
-  display: flex;
-}
-
-.llm-result.llm-error {
+.llm-panel .chat-row-error .chat-text {
+  background: #4a2c2c;
   color: #ffd6d6;
+}
+
+.llm-panel .chat-row-pending .chat-text {
+  color: var(--muted);
 }
 
 .llm-actions {

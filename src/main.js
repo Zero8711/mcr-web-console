@@ -64,7 +64,7 @@ const els = {
   llmModel: document.getElementById('txt-llm-model'),
   llmKey: document.getElementById('txt-llm-key'),
   llmAfterCommand: document.getElementById('chk-llm-after-command'),
-  llmResult: document.getElementById('llm-result'),
+  llmLog: document.getElementById('llm-log'),
   llmAnalyze: document.getElementById('btn-llm-analyze'),
   llmQuestion: document.getElementById('txt-llm-question'),
   llmAskForm: document.getElementById('llm-ask-form'),
@@ -894,6 +894,7 @@ function sendConsoleCommand(command, options) {
 
 const llmAnalyzeTimers = {};
 let llmAnalyzeBusy = false;
+let llmPendingRow = null;
 
 function bindLlmAnalyze() {
   if (!els.llmPanel || typeof LlmAnalyze === 'undefined') {
@@ -930,17 +931,16 @@ function bindLlmAnalyze() {
   });
   els.llmAfterCommand?.addEventListener('change', persist);
   els.llmAnalyze?.addEventListener('click', () => {
-    runLlmAnalyze(currentPane(), readLlmQuestion(), true);
+    runLlmAnalyze(currentPane(), readLlmQuestion(), true, 'button');
   });
   els.llmAskForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const question = readLlmQuestion();
     if (!question) {
-      showLlmResult('질문을 입력하세요.', true);
       els.llmQuestion?.focus();
       return;
     }
-    runLlmAnalyze(currentPane(), question, true);
+    runLlmAnalyze(currentPane(), question, true, 'ask');
   });
 
   refreshLlmChromeNote();
@@ -1050,7 +1050,7 @@ function scheduleLlmAnalyze(pane) {
 
   llmAnalyzeTimers[id] = setTimeout(() => {
     llmAnalyzeTimers[id] = null;
-    runLlmAnalyze(pane, '', false);
+    runLlmAnalyze(pane, '', false, 'auto');
   }, 3000);
 }
 
@@ -1058,8 +1058,19 @@ function readLlmQuestion() {
   return String(els.llmQuestion?.value || '').trim();
 }
 
-function runLlmAnalyze(pane, question, allowDownload) {
-  if (!els.llmResult || llmAnalyzeBusy) {
+function llmUserLabel(question, source) {
+  const ask = String(question || '').trim();
+  if (ask) {
+    return ask;
+  }
+  if (source === 'auto') {
+    return '자동 분석';
+  }
+  return '화면 분석';
+}
+
+function runLlmAnalyze(pane, question, allowDownload, source) {
+  if (!els.llmLog || llmAnalyzeBusy) {
     return;
   }
 
@@ -1082,21 +1093,25 @@ function runLlmAnalyze(pane, question, allowDownload) {
       ? 'Chrome 내장 AI 에 묻는 중…'
       : '화면을 읽는 중… (Chrome 내장 AI / 유료 API 없음)';
   }
-  showLlmResult(waiting, false);
+
+  beginLlmTurn(llmUserLabel(ask, source), waiting);
+  if (ask && els.llmQuestion) {
+    els.llmQuestion.value = '';
+  }
 
   LlmAnalyze.analyzePane(pane, settings, ask, {
     allowDownload: canDownload,
     onProgress: (loaded) => {
       const pct = Math.round(Math.min(1, Math.max(0, Number(loaded) || 0)) * 100);
-      showLlmResult('Chrome 내장 모델 받는 중… ' + pct + '%', false);
+      updateLlmPending('Chrome 내장 모델 받는 중… ' + pct + '%', false);
     },
   })
     .then((text) => {
-      showLlmResult(text, false);
+      finishLlmTurn(text, false);
       refreshLlmChromeNote();
     })
     .catch((err) => {
-      showLlmResult(err.message || String(err), true);
+      finishLlmTurn(err.message || String(err), true);
     })
     .finally(() => {
       llmAnalyzeBusy = false;
@@ -1109,12 +1124,70 @@ function runLlmAnalyze(pane, question, allowDownload) {
     });
 }
 
-function showLlmResult(text, isError) {
-  if (!els.llmResult) {
+function appendLlmLine(from, text, options) {
+  const logEl = els.llmLog;
+  if (!logEl) {
+    return null;
+  }
+
+  const hint = options || {};
+  const row = document.createElement('div');
+  row.className = hint.mine ? 'chat-row chat-row-mine' : 'chat-row chat-row-other';
+  if (hint.error) {
+    row.classList.add('chat-row-error');
+  }
+  if (hint.pending) {
+    row.classList.add('chat-row-pending');
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'chat-from';
+  nameEl.textContent = from;
+  bubble.appendChild(nameEl);
+
+  const body = document.createElement('p');
+  body.className = 'chat-text';
+  body.textContent = text || '';
+  bubble.appendChild(body);
+
+  row.appendChild(bubble);
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+  return row;
+}
+
+function beginLlmTurn(userText, waiting) {
+  appendLlmLine('나', userText, { mine: true });
+  llmPendingRow = appendLlmLine('AI', waiting, { pending: true });
+}
+
+function llmPendingBody() {
+  return llmPendingRow ? llmPendingRow.querySelector('.chat-text') : null;
+}
+
+function updateLlmPending(text, isError) {
+  const body = llmPendingBody();
+  if (!body || !llmPendingRow) {
+    appendLlmLine('AI', text, { error: isError });
     return;
   }
-  els.llmResult.textContent = text || '';
-  els.llmResult.classList.toggle('llm-error', Boolean(isError) && Boolean(text));
+  body.textContent = text || '';
+  llmPendingRow.classList.toggle('chat-row-error', Boolean(isError));
+  if (isError) {
+    llmPendingRow.classList.remove('chat-row-pending');
+  }
+  els.llmLog.scrollTop = els.llmLog.scrollHeight;
+}
+
+function finishLlmTurn(text, isError) {
+  updateLlmPending(text, isError);
+  if (llmPendingRow) {
+    llmPendingRow.classList.remove('chat-row-pending');
+    llmPendingRow = null;
+  }
 }
 
 function sendHostChat(text) {

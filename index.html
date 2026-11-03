@@ -6,7 +6,7 @@
     <title>웹 시리얼 콘솔</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <link rel="stylesheet" href="./vendor/xterm.css" />
-    <link rel="stylesheet" href="./src/style.css?v=20261102f" />
+    <link rel="stylesheet" href="./src/style.css?v=20261103c" />
   </head>
   <body>
     <div id="app">
@@ -283,12 +283,12 @@
               </label>
             </details>
           </div>
-          <div id="llm-result" class="llm-result"></div>
+          <div id="llm-log" class="chat-log llm-log"></div>
           <div class="side-empty" id="llm-empty">
             <p class="side-empty-title">Chrome 내장 AI 시험</p>
             <p class="side-empty-live">
               페이지를 한 번 클릭하면 모델을 받기 시작합니다. 그동안 COM 을 연결하세요.
-              받은 뒤 ifconfig 하고 [이 칸 분석] 또는 [묻기]를 누르세요.
+              받은 뒤 질문을 적거나 [이 칸 분석]을 누르면, 이 칸에 대화처럼 쌓입니다.
             </p>
           </div>
           <form id="llm-ask-form" class="chat-form llm-ask">
@@ -351,6 +351,6 @@
     <script src="./src/session-log.js?v=20261030h"></script>
     <script src="./src/llm-analyze.js?v=20261103b"></script>
     <script src="./src/console-pane.js?v=20261102e"></script>
-    <script src="./src/main.js?v=20261103b"></script>
+    <script src="./src/main.js?v=20261103c"></script>
   </body>
 </html>
