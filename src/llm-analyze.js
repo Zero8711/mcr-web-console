@@ -16,16 +16,13 @@
   const CHROME_UNAVAILABLE = 'CHROME_AI_UNAVAILABLE';
 
   const SYSTEM_PROMPT =
-    '당신은 AP/라우터 시리얼 콘솔을 보는 시험 조수입니다. ' +
-    '한국어로 답하세요. 번호 항목을 비워 두지 마세요.\n' +
-    '이번 메시지의 화면과 마지막 명령만 보세요.\n' +
-    '1) 마지막 명령: 사용자가 친 명령 문자열을 그대로 적으세요. 예: brctl show\n' +
-    '   브리지 이름이나 인터페이스 이름(br-lan, eth0)을 명령으로 적지 마세요.\n' +
-    '2) 이 명령이 확인하는 것을 한 문장으로 적으세요.\n' +
-    '3) 화면에 있는 값을 나열하세요. 브리지·포트·STP·IP 가 보이면 적으세요.\n' +
-    '화면에 없는 값만 없다고 하세요. 새 명령을 지어내지 마세요.\n' +
-    '시험자 질문이 있으면 그 질문에 먼저 답하세요. ' +
-    '명령을 추천할 때는 이번 메시지에 적힌 장비 명령 목록에 있는 것만 쓰세요.';
+    '당신은 AP/라우터 시리얼 콘솔을 보고 시험자를 돕는 조수입니다.\n' +
+    '한국어로 3~8문장 설명하세요.\n' +
+    '지금 화면이 무엇을 보여 주는지, 시험자가 어떤 값을 보면 되는지 말하세요.\n' +
+    '화면에 있는 이름과 숫자만 쓰세요. 없는 값은 추측하지 마세요.\n' +
+    '화면 출력을 그대로 다시 붙이지 마세요. 번호 목록을 비워 두지 마세요.\n' +
+    '질문이 없으면 다른 명령을 제안하지 마세요.\n' +
+    '질문이 있으면 그 질문에 먼저 답하고, 화면을 근거로 설명하세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
@@ -180,30 +177,22 @@
 
   function buildUserText(pane, logText, question, probeFacts, command) {
     const cmd = command || pickCommand(pane, logText);
-    const screenFacts = readScreenFacts(cmd, logText);
     let userText =
-      '이전 대화는 무시하세요.\n' +
       '장비: ' + (pane.title || '콘솔') + '\n' +
-      '마지막 명령: ' + (cmd || '(화면에서 추정)') + '\n' +
-      commandHelp(cmd) + '\n\n';
-    if (screenFacts.length) {
-      userText += '화면에서 이미 읽은 값:\n';
-      for (let i = 0; i < screenFacts.length; i += 1) {
-        userText += '- ' + screenFacts[i] + '\n';
-      }
-      userText += '\n';
-    }
-    if (!question) {
-      userText +=
-        '질문이 없습니다. 아래 형식으로 채우세요. 빈 줄을 두지 마세요.\n' +
-        '1) 마지막 명령: ' + (cmd || '') + '\n' +
-        '2) (한 문장)\n' +
-        '3) 화면에 있는 브리지/포트/값\n\n';
-    }
-    userText += formatProbeFacts(probeFacts, question);
-    userText += '화면:\n' + logText;
+      '마지막 명령: ' + (cmd || '(화면에서 추정)') + '\n\n';
     if (question) {
-      userText += '\n\n시험자 질문:\n' + question;
+      userText += formatProbeFacts(probeFacts, question);
+    }
+    userText += '화면:\n' + logText + '\n\n';
+    if (question) {
+      userText += '질문: ' + question + '\n';
+      userText += '화면을 근거로 한국어로 답하세요. 화면을 그대로 복사하지 마세요.';
+    } else {
+      userText +=
+        '이 화면을 한국어로 설명하세요.\n' +
+        '- 이 출력이 무엇을 보여 주는지\n' +
+        '- 지금 화면에서 확인할 수 있는 값(이름, IP, 링크, 포트, 에러 등)\n' +
+        '화면 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.';
     }
     return userText;
   }
@@ -241,11 +230,10 @@
     const session = await openChromeTurn(options);
     const shouldDestroy = session !== chromeSession;
     try {
-      const raw = String(await session.prompt(buildUserText(pane, logText, question, probeFacts, command)) || '').trim();
-      if (!raw) {
+      const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts, command)) || '').trim();
+      if (!answer) {
         throw new Error('Chrome 내장 AI 가 빈 답을 돌려줬습니다.');
       }
-      const answer = fillThinAnswer(raw, command, readScreenFacts(command, logText));
       const tag = probeFacts && !probeFacts.skipped
         ? '[Chrome 내장 AI · 장비 경로 확인]'
         : '[Chrome 내장 AI · Gemini Nano]';
@@ -604,43 +592,6 @@
       }
     }
     return logText;
-  }
-
-  function fillThinAnswer(answer, command, facts) {
-    const text = String(answer || '');
-    if (!isThinAnswer(text) || !facts.length) {
-      return text;
-    }
-    const lines = [
-      '1) 마지막 명령: ' + (command || ''),
-      '2) ' + commandHelp(command),
-      '3) 화면에서 읽은 값:',
-    ];
-    for (let i = 0; i < facts.length; i += 1) {
-      lines.push('   - ' + facts[i]);
-    }
-    return lines.join('\n');
-  }
-
-  function isThinAnswer(answer) {
-    const lines = String(answer || '').split(/\n/);
-    let emptyNumbered = 0;
-    let numbered = 0;
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i].trim();
-      const match = line.match(/^([123])\)\s*(.*)$/);
-      if (!match) {
-        continue;
-      }
-      numbered += 1;
-      if (!String(match[2] || '').trim()) {
-        emptyNumbered += 1;
-      }
-    }
-    if (numbered >= 2 && emptyNumbered >= 1) {
-      return true;
-    }
-    return String(answer || '').replace(/\s+/g, '').length < 40;
   }
 
   async function requestChat(settings, userText) {
