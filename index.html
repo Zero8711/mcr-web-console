@@ -242,9 +242,9 @@
           </form>
         </aside>
         <aside id="llm-panel" class="chat-panel llm-panel">
-          <div class="chat-header">로그 분석 · 화면 읽기 시험</div>
+          <div class="chat-header">로그 분석 · Chrome 내장 AI 시험</div>
           <div class="llm-settings">
-            <p class="llm-trial-note">지금은 유료 API 없이 화면을 읽고, 질문 칸이 붙는지만 확인합니다.</p>
+            <p id="llm-trial-note" class="llm-trial-note">Chrome 내장 AI 상태를 확인하는 중…</p>
             <label class="checkbox">
               <input id="chk-llm-after-command" type="checkbox" checked />
               명령 후 자동 분석
@@ -257,7 +257,7 @@
                   id="txt-llm-endpoint"
                   type="text"
                   spellcheck="false"
-                  placeholder="비워 두면 화면 읽기 시험"
+                  placeholder="비워 두면 Chrome 내장 AI"
                   autocomplete="off"
                 />
               </label>
@@ -285,9 +285,10 @@
           </div>
           <div id="llm-result" class="llm-result"></div>
           <div class="side-empty" id="llm-empty">
-            <p class="side-empty-title">화면 읽기 시험</p>
+            <p class="side-empty-title">Chrome 내장 AI 시험</p>
             <p class="side-empty-live">
-              ifconfig 를 친 뒤 [이 칸 분석] 을 누르거나, 아래에 질문을 적고 [묻기] 를 누르세요.
+              공식 Chrome 148 이상에서 ifconfig 뒤 [이 칸 분석] 또는 질문을 적고 [묻기]를 누르세요.
+              첫 클릭에서 모델을 받을 수 있습니다.
             </p>
           </div>
           <form id="llm-ask-form" class="chat-form llm-ask">
@@ -348,8 +349,8 @@
     <script src="./src/share.js?v=20261030g"></script>
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20261030h"></script>
-    <script src="./src/llm-analyze.js?v=20261102f"></script>
+    <script src="./src/llm-analyze.js?v=20261103a"></script>
     <script src="./src/console-pane.js?v=20261102e"></script>
-    <script src="./src/main.js?v=20261102f"></script>
+    <script src="./src/main.js?v=20261103a"></script>
   </body>
 </html>
