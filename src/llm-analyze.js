@@ -12,21 +12,22 @@
   const AFTER_CMD_KEY = 'llm-after-command';
   const PROBE_KEY = 'llm-probe-device';
   const MAX_LOG_LINES = 80;
+  const MAX_SCAN_LINES = 400;
   const CHROME_NEED_CLICK = 'CHROME_AI_NEED_CLICK';
   const CHROME_UNAVAILABLE = 'CHROME_AI_UNAVAILABLE';
 
   const SYSTEM_PROMPT =
     '당신은 AP/라우터 시리얼 콘솔을 보고 시험자를 돕는 조수입니다.\n' +
     '한국어로 3~8문장 설명하세요.\n' +
-    '지금 화면이 무엇을 보여 주는지, 시험자가 어떤 값을 보면 되는지 말하세요.\n' +
+    '이번 메시지에 붙은 명령과 출력만 설명하세요. 이전 대화는 없습니다.\n' +
     '화면에 있는 이름과 숫자만 쓰세요. 없는 값은 추측하지 마세요.\n' +
     '화면 출력을 그대로 다시 붙이지 마세요. 번호 목록을 비워 두지 마세요.\n' +
     '질문이 없으면 다른 명령을 제안하지 마세요.\n' +
-    '질문이 있으면 그 질문에 먼저 답하고, 화면을 근거로 설명하세요.\n' +
-    '아래에 붙은 화면만 이번 명령 결과입니다. 다른 명령 결과를 끌어오지 마세요.';
+    '질문이 있으면 그 질문에 먼저 답하고, 이번 출력만 근거로 쓰세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
+  let chromeModelReady = false;
   const chromeProgressListeners = [];
 
   function loadSettings() {
@@ -131,12 +132,13 @@
 
     const ask = String(question || '').trim();
     const hint = options || {};
-    let logText = pane.getRecentLog(MAX_LOG_LINES);
-    if (!logText.trim()) {
+    const rawLog = pane.getRecentLog(MAX_SCAN_LINES);
+    if (!rawLog.trim()) {
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
     }
-    const command = pickCommand(pane, logText);
-    logText = clipAnalysisLog(logText, command);
+    const sliced = sliceLastCommand(rawLog, pane.lastCommand);
+    const command = sliced.command;
+    const logText = sliced.text;
     const probeFacts = await maybeProbeDevice(pane, ask, hint);
 
     if (!isTrialMode(settings)) {
@@ -180,20 +182,21 @@
     const cmd = command || pickCommand(pane, logText);
     let userText =
       '장비: ' + (pane.title || '콘솔') + '\n' +
-      '마지막 명령: ' + (cmd || '(화면에서 추정)') + '\n\n';
+      '지금 설명할 명령: ' + (cmd || '(화면에서 추정)') + '\n' +
+      '이 명령의 출력만 있습니다. 다른 명령은 실행되지 않았습니다.\n\n';
     if (question) {
       userText += formatProbeFacts(probeFacts, question);
     }
-    userText += '화면:\n' + logText + '\n\n';
+    userText += '출력:\n' + logText + '\n\n';
     if (question) {
       userText += '질문: ' + question + '\n';
-      userText += '화면을 근거로 한국어로 답하세요. 화면을 그대로 복사하지 마세요.';
+      userText += '위 출력만 근거로 한국어로 답하세요. 출력을 그대로 복사하지 마세요.';
     } else {
       userText +=
-        '아래는 이번 명령의 결과만입니다. 이전 명령은 없다고 생각하고 설명하세요.\n' +
+        '위 명령과 출력만 한국어로 설명하세요.\n' +
         '- 이 출력이 무엇을 보여 주는지\n' +
-        '- 지금 화면에서 확인할 수 있는 값(이름, IP, 링크, 포트, 에러 등)\n' +
-        '화면 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.';
+        '- 지금 확인할 수 있는 값\n' +
+        '출력 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.';
     }
     return userText;
   }
@@ -229,7 +232,6 @@
 
   async function explainWithChromeAi(pane, logText, question, options, probeFacts, command) {
     const session = await openChromeTurn(options);
-    const shouldDestroy = session !== chromeSession;
     try {
       const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts, command)) || '').trim();
       if (!answer) {
@@ -240,13 +242,7 @@
         : '[Chrome 내장 AI · Gemini Nano]';
       return tag + '\n\n' + answer;
     } finally {
-      if (shouldDestroy && session && typeof session.destroy === 'function') {
-        try {
-          session.destroy();
-        } catch {
-          // session already gone
-        }
-      }
+      destroyChromeSession();
     }
   }
 
@@ -268,7 +264,7 @@
   }
 
   function isChromeSessionReady() {
-    return Boolean(chromeSession);
+    return Boolean(chromeSession) || chromeModelReady;
   }
 
   function isChromeDownloading() {
@@ -332,6 +328,7 @@
       },
     }).then(function (session) {
       chromeSession = session;
+      chromeModelReady = true;
       chromeSessionWait = null;
       return session;
     }).catch(function (err) {
@@ -342,16 +339,39 @@
     return chromeSessionWait;
   }
 
+  function destroyChromeSession() {
+    const session = chromeSession;
+    chromeSession = null;
+    if (session && typeof session.destroy === 'function') {
+      try {
+        session.destroy();
+      } catch {
+        // session already gone
+      }
+    }
+  }
+
   /**
-   * 분석마다 새 대화를 연다. clone 은 이전 턴이 섞일 수 있어 쓰지 않는다.
+   * 분석마다 빈 대화를 연다. 이전 턴을 같은 세션에 남기면
+   * cat 온도를 brctl 로 설명하는 일이 생긴다.
    */
   async function openChromeTurn(options) {
-    await getChromeSession(options);
-    return LanguageModel.create({
+    addChromeProgress(options && options.onProgress);
+    if (chromeSessionWait) {
+      await chromeSessionWait;
+    }
+    if (!chromeModelReady) {
+      await getChromeSession(options);
+    }
+    destroyChromeSession();
+    const session = await LanguageModel.create({
       initialPrompts: [
         { role: 'system', content: SYSTEM_PROMPT },
       ],
     });
+    chromeSession = session;
+    chromeModelReady = true;
+    return session;
   }
 
   function toChromeError(err) {
@@ -362,6 +382,9 @@
     }
     if (name === 'NotSupportedError') {
       return '이 Chrome 은 지금 요청을 내장 AI 로 처리하지 못합니다. 공식 Chrome 148 이상인지 확인하세요.';
+    }
+    if (name === 'QuotaExceededError' || /quota exceeded/i.test(message)) {
+      return 'Chrome 내장 AI 세션이 아직 남아 있습니다. 페이지를 새로고침한 뒤 다시 분석하세요.';
     }
     if (/failed to fetch|networkerror|load failed/i.test(message)) {
       return 'Chrome 내장 모델을 받지 못했습니다. 네트워크와 디스크 여유 공간을 확인하세요.';
@@ -445,31 +468,25 @@
   }
 
   function pickCommand(pane, logText) {
-    const typed = String(pane.lastCommand || '').trim();
     const seen = guessCommand(logText);
-    if (seen && typed && seen !== typed && seen.endsWith(typed)) {
+    if (seen) {
       return seen;
     }
-    return typed || seen || '';
+    return String(pane.lastCommand || '').trim();
   }
 
   /**
-   * 프롬프트 뒤의 명령을 통째로 가져온다. -h 같은 옵션도 포함.
+   * 화면에 보이는 마지막 프롬프트 명령을 쓴다.
    * 칸이 좁아 나뉜 줄은 getRecentLog 에서 이미 붙여 둔다.
    */
   function guessCommand(logText) {
     const lines = String(logText || '').split(/\n/);
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      const line = lines[i];
-      if (!/@/.test(line) || !/[#\$]/.test(line)) {
-        continue;
-      }
-      const hashed = line.match(/[#\$]\s+(\S.*)$/);
-      if (hashed) {
-        return hashed[1].trim();
-      }
+    const index = findLastPromptCommandIndex(lines);
+    if (index < 0) {
+      return '';
     }
-    return '';
+    const parsed = parsePromptCommand(lines[index]);
+    return parsed ? parsed.command : '';
   }
 
   function readIfconfigFacts(logText) {
@@ -575,18 +592,118 @@
   }
 
   /**
-   * 이번 명령 출력만 남긴다. pwd/busybox 확인 출력과 이전 명령은 뺀다.
+   * 마지막 사용자 명령 줄부터 다음 프롬프트 전까지.
+   * 이전 ifconfig/brctl/ps 출력은 넣지 않는다.
    */
-  function clipAnalysisLog(logText, command) {
+  function sliceLastCommand(logText, typedCommand) {
     const cleaned = stripProbeBlocks(String(logText || ''));
     const lines = cleaned.split(/\n/);
-    const start = findLastCommandLine(lines, command);
-    const from = start >= 0 ? start : Math.max(0, lines.length - 20);
-    const clipped = lines.slice(from, from + 35);
-    while (clipped.length && !clipped[clipped.length - 1]) {
-      clipped.pop();
+    let start = findLastPromptCommandIndex(lines);
+    let command = '';
+
+    if (start >= 0) {
+      const parsed = parsePromptCommand(lines[start]);
+      command = parsed ? parsed.command : '';
+    } else {
+      start = findLastCommandLine(lines, typedCommand);
+      command = String(typedCommand || '').trim();
     }
-    return clipped.join('\n');
+
+    if (start < 0) {
+      const from = Math.max(0, lines.length - 8);
+      return {
+        command: command,
+        text: trimLogLines(lines.slice(from)).join('\n'),
+      };
+    }
+
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (parsePromptCommand(lines[i]) || isIdlePrompt(lines[i])) {
+        end = i;
+        break;
+      }
+    }
+
+    const clipped = trimLogLines(lines.slice(start, Math.min(end, start + MAX_LOG_LINES)));
+    return {
+      command: command,
+      text: clipped.join('\n'),
+    };
+  }
+
+  function trimLogLines(lines) {
+    const out = lines.slice();
+    while (out.length && !String(out[out.length - 1] || '').trim()) {
+      out.pop();
+    }
+    return out;
+  }
+
+  function findLastPromptCommandIndex(lines) {
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (isProbeLine(lines[i])) {
+        continue;
+      }
+      const parsed = parsePromptCommand(lines[i]);
+      if (parsed && parsed.command) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * root@host:~# ifconfig 처럼 셸 프롬프트 뒤 명령을 읽는다.
+   * PATH=/usr/bin:$PATH 같은 일반 줄은 건너뛴다.
+   */
+  function parsePromptCommand(line) {
+    const text = String(line || '').replace(/\s+$/g, '');
+    if (!text || text.length > 240) {
+      return null;
+    }
+    const match = text.match(/^(.*)([#\$])\s*(\S.*)$/);
+    if (!match) {
+      return null;
+    }
+    if (!isPromptPrefix(match[1])) {
+      return null;
+    }
+    return { command: match[3].trim() };
+  }
+
+  function isIdlePrompt(line) {
+    const text = String(line || '').replace(/\s+$/g, '');
+    if (!text || text.length > 180) {
+      return false;
+    }
+    const match = text.match(/^(.*)([#\$])\s*$/);
+    return Boolean(match && isPromptPrefix(match[1]));
+  }
+
+  function isPromptPrefix(prefix) {
+    const text = String(prefix || '').trim();
+    if (!text) {
+      return true;
+    }
+    if (/^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+/.test(text)) {
+      return true;
+    }
+    if (/^[\/~][\w./-]*$/.test(text)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isProbeLine(line) {
+    const text = String(line || '');
+    const probeCmd = typeof DutProbe !== 'undefined' ? String(DutProbe.command || '') : '';
+    if (probeCmd && text.indexOf(probeCmd) >= 0) {
+      return true;
+    }
+    return text.indexOf('echo --PATH--') >= 0
+      || text.indexOf('echo --LS--') >= 0
+      || text.indexOf('echo --BB--') >= 0;
   }
 
   function stripProbeBlocks(logText) {
@@ -634,14 +751,7 @@
   }
 
   function isUserPromptLine(line) {
-    const text = String(line || '').replace(/\s+$/g, '');
-    if (!text || text.length > 180) {
-      return false;
-    }
-    if (/@/.test(text) && /[#\$]/.test(text)) {
-      return true;
-    }
-    return /[#\$]\s*$/.test(text) && /[\/~:]/.test(text);
+    return Boolean(parsePromptCommand(line) || isIdlePrompt(line));
   }
 
   async function requestChat(settings, userText) {
