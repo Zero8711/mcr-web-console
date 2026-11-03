@@ -28,6 +28,7 @@
 
   let chromeSession = null;
   let chromeSessionWait = null;
+  const chromeProgressListeners = [];
 
   function loadSettings() {
     return {
@@ -81,13 +82,13 @@
       if (state === 'downloadable') {
         return {
           state: state,
-          message: '[이 칸 분석] 또는 [묻기]를 누르면 Chrome 이 내장 모델을 받습니다. 첫 1회만 내려받습니다.',
+          message: '페이지를 한 번 클릭하면 Chrome 이 내장 모델을 받기 시작합니다. 용량이 커서 첫 1회만 깁니다. 그동안 COM 연결은 그대로 하세요.',
         };
       }
       if (state === 'downloading') {
         return {
           state: state,
-          message: 'Chrome 이 내장 모델을 받는 중입니다. 잠시 뒤 [이 칸 분석]을 다시 누르세요.',
+          message: 'Chrome 이 내장 모델을 받는 중입니다. 그동안 COM 연결·명령은 그대로 하세요.',
         };
       }
       return {
@@ -179,7 +180,54 @@
     return '[Chrome 내장 AI · Gemini Nano]\n\n' + answer;
   }
 
+  function addChromeProgress(onProgress) {
+    if (typeof onProgress !== 'function') {
+      return;
+    }
+    if (chromeProgressListeners.indexOf(onProgress) >= 0) {
+      return;
+    }
+    chromeProgressListeners.push(onProgress);
+  }
+
+  function notifyChromeProgress(loaded) {
+    const value = Number(loaded) || 0;
+    for (let i = 0; i < chromeProgressListeners.length; i += 1) {
+      chromeProgressListeners[i](value);
+    }
+  }
+
+  function isChromeSessionReady() {
+    return Boolean(chromeSession);
+  }
+
+  function isChromeDownloading() {
+    return Boolean(chromeSessionWait) && !chromeSession;
+  }
+
+  /**
+   * 첫 클릭에서 모델을 미리 받는다. 분석 버튼을 누를 때까지 기다리지 않는다.
+   */
+  function prefetchChromeAi(options) {
+    if (!hasChromePromptApi()) {
+      return Promise.resolve(null);
+    }
+    return getChromeSession({
+      allowDownload: true,
+      onProgress: options && options.onProgress,
+    }).catch(function (err) {
+      const code = err && err.message;
+      if (code === CHROME_UNAVAILABLE || code === CHROME_NEED_CLICK) {
+        return null;
+      }
+      throw err;
+    });
+  }
+
   async function getChromeSession(options) {
+    const hint = options || {};
+    addChromeProgress(hint.onProgress);
+
     if (chromeSession) {
       return chromeSession;
     }
@@ -187,8 +235,7 @@
       return chromeSessionWait;
     }
 
-    const allowDownload = options.allowDownload !== false;
-    const onProgress = options.onProgress;
+    const allowDownload = hint.allowDownload !== false;
     let state = 'unavailable';
 
     try {
@@ -209,11 +256,8 @@
         { role: 'system', content: SYSTEM_PROMPT },
       ],
       monitor: function (monitor) {
-        if (!onProgress) {
-          return;
-        }
         monitor.addEventListener('downloadprogress', function (event) {
-          onProgress(Number(event.loaded) || 0);
+          notifyChromeProgress(Number(event.loaded) || 0);
         });
       },
     }).then(function (session) {
@@ -232,7 +276,7 @@
     const name = err && err.name ? String(err.name) : '';
     const message = err && err.message ? String(err.message) : String(err);
     if (name === 'NotAllowedError' || /user activation|NotAllowedError/i.test(message)) {
-      return 'Chrome 내장 모델은 버튼을 누른 뒤에만 받을 수 있습니다. [이 칸 분석]을 다시 누르세요.';
+      return 'Chrome 내장 모델은 페이지를 한 번 클릭한 뒤에만 받을 수 있습니다. 아무 곳이나 다시 클릭하세요.';
     }
     if (name === 'NotSupportedError') {
       return '이 Chrome 은 지금 요청을 내장 AI 로 처리하지 못합니다. 공식 Chrome 148 이상인지 확인하세요.';
@@ -465,6 +509,9 @@
     isTrialMode: isTrialMode,
     hasChromePromptApi: hasChromePromptApi,
     probeChromeAi: probeChromeAi,
+    prefetchChromeAi: prefetchChromeAi,
+    isChromeSessionReady: isChromeSessionReady,
+    isChromeDownloading: isChromeDownloading,
     maxLogLines: MAX_LOG_LINES,
   };
 })(window);

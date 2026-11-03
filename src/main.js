@@ -944,6 +944,52 @@ function bindLlmAnalyze() {
   });
 
   refreshLlmChromeNote();
+  bindChromeModelPrefetch();
+}
+
+function bindChromeModelPrefetch() {
+  if (typeof LlmAnalyze === 'undefined' || !LlmAnalyze.prefetchChromeAi) {
+    return;
+  }
+
+  const start = () => {
+    const settings = readLlmSettingsFromForm();
+    if (!LlmAnalyze.isTrialMode(settings) || !LlmAnalyze.hasChromePromptApi()) {
+      return;
+    }
+    if (LlmAnalyze.isChromeSessionReady()) {
+      return;
+    }
+
+    LlmAnalyze.prefetchChromeAi({
+      onProgress: showChromeDownloadProgress,
+    })
+      .then(() => {
+        refreshLlmChromeNote();
+      })
+      .catch((err) => {
+        if (els.llmTrialNote) {
+          els.llmTrialNote.textContent = err.message || String(err);
+        }
+      });
+  };
+
+  document.addEventListener('pointerdown', function onFirstClick(event) {
+    if (!event.isTrusted) {
+      return;
+    }
+    document.removeEventListener('pointerdown', onFirstClick, true);
+    start();
+  }, true);
+}
+
+function showChromeDownloadProgress(loaded) {
+  if (!els.llmTrialNote) {
+    return;
+  }
+  const pct = Math.round(Math.min(1, Math.max(0, Number(loaded) || 0)) * 100);
+  els.llmTrialNote.textContent =
+    'Chrome 내장 모델 받는 중… ' + pct + '% · 그동안 COM 연결·명령은 그대로 하세요.';
 }
 
 function refreshLlmChromeNote() {
@@ -957,8 +1003,21 @@ function refreshLlmChromeNote() {
     return;
   }
 
+  if (LlmAnalyze.isChromeSessionReady()) {
+    els.llmTrialNote.textContent = 'Chrome 내장 AI(Gemini Nano)를 이 칸에서 씁니다. API 키는 필요 없습니다.';
+    return;
+  }
+
+  if (LlmAnalyze.isChromeDownloading && LlmAnalyze.isChromeDownloading()) {
+    return;
+  }
+
   LlmAnalyze.probeChromeAi().then((info) => {
     if (!els.llmTrialNote) {
+      return;
+    }
+    if (LlmAnalyze.isChromeSessionReady()) {
+      els.llmTrialNote.textContent = 'Chrome 내장 AI(Gemini Nano)를 이 칸에서 씁니다. API 키는 필요 없습니다.';
       return;
     }
     els.llmTrialNote.textContent = info.message;
