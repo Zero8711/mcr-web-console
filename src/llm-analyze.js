@@ -17,18 +17,19 @@
 
   const SYSTEM_PROMPT =
     '당신은 AP/라우터 시리얼 콘솔을 보는 시험 조수입니다. ' +
-    '한국어로 짧게 답하세요. 목록은 3~6개면 됩니다.\n' +
-    '반드시 아래를 포함하세요.\n' +
-    '1) 마지막 명령이 무엇인지\n' +
-    '2) 이 명령으로 무엇을 확인하는지\n' +
-    '3) 출력에서 눈에 띄는 정보(인터페이스, IP, 링크, 에러 카운터 등)\n' +
-    '화면에 없는 값은 추측이라고 밝히세요. ' +
+    '한국어로 짧게 답하세요.\n' +
+    '이번 메시지의 화면과 마지막 명령만 보세요. 이전 질문은 무시하세요.\n' +
+    '마지막 명령을 다른 명령으로 바꾸거나 지어내지 마세요.\n' +
+    '질문이 없으면 아래만 적으세요.\n' +
+    '1) 마지막 명령\n' +
+    '2) 이 명령이 확인하는 것\n' +
+    '3) 화면에 실제로 있는 값\n' +
+    '화면에 없는 값은 없다고 하세요. 새 명령을 제안하지 마세요.\n' +
     '시험자 질문이 있으면 그 질문에 먼저 답하세요. ' +
-    '장비에서 확인한 현재 경로·파일·명령 목록이 있으면 그 목록에 있는 것만 추천하세요. ' +
-    '목록에 없는 명령은 이 장비에서 확인되지 않았다고 말하세요. ' +
-    '재부팅 명령은 시험자가 묻기 전에는 권하지 마세요. ' +
-    '경로 확인용 pwd 는 이미 보냈을 수 있습니다. 그 외 명령을 실행했다고 말하지 마세요. ' +
-    '영어 로그 값(인터페이스 이름, IP, 카운터, 파일 이름)은 그대로 두세요.';
+    '명령을 추천할 때는 이번 메시지에 적힌 장비 명령 목록에 있는 것만 쓰세요. ' +
+    '목록에 없는 명령, Cisco 스타일 명령, 영어 추정 명령은 쓰지 마세요. ' +
+    '재부팅은 시험자가 묻기 전에는 권하지 마세요. ' +
+    '영어 로그 값(브리지 이름, 인터페이스, IP, 파일 이름)은 그대로 두세요.';
 
   let chromeSession = null;
   let chromeSessionWait = null;
@@ -180,25 +181,31 @@
   }
 
   function buildUserText(pane, logText, question, probeFacts) {
+    const command = pickCommand(pane, logText);
     let userText =
+      '이전 대화는 무시하세요.\n' +
       '장비: ' + (pane.title || '콘솔') + '\n' +
-      '마지막 명령: ' + (pane.lastCommand || '(화면에서 추정)') + '\n\n' +
-      formatProbeFacts(probeFacts) +
-      '화면:\n' +
-      logText;
+      '마지막 명령(이것을 분석하세요. 다른 명령을 만들지 마세요): ' +
+      (command || pane.lastCommand || '(화면에서 추정)') +
+      '\n\n';
+    if (!question) {
+      userText += '질문이 없습니다. 위 마지막 명령의 화면 출력만 설명하세요. 다른 명령을 제안하지 마세요.\n\n';
+    }
+    userText += formatProbeFacts(probeFacts, question);
+    userText += '화면:\n' + logText;
     if (question) {
       userText += '\n\n시험자 질문:\n' + question;
     }
     return userText;
   }
 
-  function formatProbeFacts(facts) {
+  function formatProbeFacts(facts, question) {
     if (!facts) {
       return '';
     }
     if (facts.skipped) {
       const why = typeof DutProbe !== 'undefined' ? DutProbe.skipLabel(facts) : '';
-      return '장비 확인: 못 함. ' + (why || facts.skipped) + ' 화면만 보고 답하고, 없는 명령은 추측하지 마세요.\n\n';
+      return '장비 확인: 못 함. ' + (why || facts.skipped) + ' 화면만 보고 답하세요.\n\n';
     }
 
     const lines = ['장비에서 직접 확인한 값:'];
@@ -212,24 +219,36 @@
     if (facts.commands && facts.commands.length) {
       lines.push('이 장비에서 확인된 명령: ' + facts.commands.join(', '));
     }
-    if (!facts.commands || !facts.commands.length || (facts.allCount || 0) <= 8) {
-      lines.push('busybox --list 를 못 읽었을 수 있습니다. 확인된 명령만 추천하세요.');
+    if (question) {
+      lines.push('명령을 추천할 때는 위 목록에 있는 것만 쓰세요. Cisco 스타일 명령은 쓰지 마세요.');
+    } else {
+      lines.push('지금은 명령을 추천하지 마세요. 화면 출력만 설명하세요.');
     }
-    lines.push('위 목록에 있는 명령만 추천하세요. 없으면 이 장비에서 확인되지 않았다고 하세요.');
     lines.push('');
     return lines.join('\n') + '\n';
   }
 
   async function explainWithChromeAi(pane, logText, question, options, probeFacts) {
-    const session = await getChromeSession(options);
-    const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts)) || '').trim();
-    if (!answer) {
-      throw new Error('Chrome 내장 AI 가 빈 답을 돌려줬습니다.');
+    const session = await openChromeTurn(options);
+    const shouldDestroy = session !== chromeSession;
+    try {
+      const answer = String(await session.prompt(buildUserText(pane, logText, question, probeFacts)) || '').trim();
+      if (!answer) {
+        throw new Error('Chrome 내장 AI 가 빈 답을 돌려줬습니다.');
+      }
+      const tag = probeFacts && !probeFacts.skipped
+        ? '[Chrome 내장 AI · 장비 경로 확인]'
+        : '[Chrome 내장 AI · Gemini Nano]';
+      return tag + '\n\n' + answer;
+    } finally {
+      if (shouldDestroy && session && typeof session.destroy === 'function') {
+        try {
+          session.destroy();
+        } catch {
+          // session already gone
+        }
+      }
     }
-    const tag = probeFacts && !probeFacts.skipped
-      ? '[Chrome 내장 AI · 장비 경로 확인]'
-      : '[Chrome 내장 AI · Gemini Nano]';
-    return tag + '\n\n' + answer;
   }
 
   function addChromeProgress(onProgress) {
@@ -322,6 +341,25 @@
     });
 
     return chromeSessionWait;
+  }
+
+  /**
+   * 분석마다 새 대화를 연다. 같은 세션을 재쓰면 이전 CPU 질문 등이 섞인다.
+   */
+  async function openChromeTurn(options) {
+    const base = await getChromeSession(options);
+    if (base && typeof base.clone === 'function') {
+      try {
+        return await base.clone();
+      } catch {
+        // clone 이 없으면 아래 create 로 간다.
+      }
+    }
+    return LanguageModel.create({
+      initialPrompts: [
+        { role: 'system', content: SYSTEM_PROMPT },
+      ],
+    });
   }
 
   function toChromeError(err) {
