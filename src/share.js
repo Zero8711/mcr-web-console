@@ -774,7 +774,6 @@
 
       const blocked = evaluateGuestPassword(
         this.passGuards,
-        msg.lockId,
         this.sharePassword,
         msg.password
       );
@@ -1015,19 +1014,23 @@
 
   const PASS_FAIL_LIMIT = 5;
   const PASS_LOCK_MS = 60 * 1000;
+  const ROOM_PASS_GUARD_KEY = 'room';
 
   function sanitizeLockId(value) {
     const clean = String(value || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
     return clean || 'anon';
   }
 
-  function evaluateGuestPassword(map, lockId, expected, given) {
-    const key = sanitizeLockId(lockId);
+  /**
+   * 이 공유 방 전체의 실패 횟수를 센다.
+   * 손님이 보낸 lockId 는 믿지 않는다.
+   */
+  function evaluateGuestPassword(map, expected, given) {
     const now = Date.now();
-    let guard = map[key];
+    let guard = map[ROOM_PASS_GUARD_KEY];
     if (!guard) {
       guard = { fails: 0, lockUntil: 0 };
-      map[key] = guard;
+      map[ROOM_PASS_GUARD_KEY] = guard;
     }
     if (guard.lockUntil > now) {
       return '5회 틀렸습니다. 1분 후 다시 시도하세요.';
@@ -1037,7 +1040,7 @@
       guard.lockUntil = 0;
     }
     if (passwordsMatch(expected, given)) {
-      delete map[key];
+      delete map[ROOM_PASS_GUARD_KEY];
       return '';
     }
     guard.fails += 1;

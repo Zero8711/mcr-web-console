@@ -763,7 +763,7 @@ public class ShareRelay
                 }
                 else
                 {
-                    error = CheckGuestPassword(room, lockId, password);
+                    error = CheckGuestPassword(room, password);
                     if (error == null && room.Guests.Count >= 20)
                     {
                         error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
@@ -890,7 +890,7 @@ public class ShareRelay
             }
             else
             {
-                error = CheckGuestPassword(room, lockId, password);
+                error = CheckGuestPassword(room, password);
                 if (error == null && room.Guests.Count >= 20)
                 {
                     error = "이 방에 접속한 인원이 가득 찼습니다. (최대 20명)";
@@ -1266,10 +1266,13 @@ public class ShareRelay
         return sb.Length == 0 ? "anon" : sb.ToString();
     }
 
-    private static string CheckGuestPassword(Room room, string lockId, string password)
+    /// <summary>
+    /// 이 방 전체의 실패 횟수를 센다. 손님이 보낸 lockId 는 쓰지 않는다.
+    /// </summary>
+    private static string CheckGuestPassword(Room room, string password)
     {
         PrunePassGuards(room);
-        var key = SanitizeLockId(lockId);
+        const string key = "room";
         PassGuard guard;
         if (!room.PassGuards.TryGetValue(key, out guard))
         {
