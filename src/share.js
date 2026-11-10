@@ -70,6 +70,7 @@
       this.transport = '';
       this.rtcGuests = [];
       this.rtcHostConn = null;
+      this.rtcHostPeerId = '';
       this.lastConsoles = '';
       this.lastAging = {};
       this.lastFiles = [];
@@ -594,6 +595,7 @@
       }
       this.rtcGuests = [];
       this.rtcHostConn = null;
+      this.rtcHostPeerId = '';
       if (wasHttp && sid) {
         fetch('/api/share/bye?sid=' + encodeURIComponent(sid), {
           method: 'POST',
@@ -617,6 +619,16 @@
      * 호스트 브라우저가 방이 되고, 접속 측은 WebRTC 로 붙는다.
      */
     connectWebRtc() {
+      this.startWebRtc().catch((err) => {
+        if (this.intentionalClose || this.failed) {
+          return;
+        }
+        this.failed = true;
+        this.onError?.(err && err.message ? err.message : String(err));
+      });
+    }
+
+    async startWebRtc() {
       this.transport = 'webrtc';
       if (typeof global.Peer !== 'function') {
         this.failed = true;
@@ -625,7 +637,13 @@
       }
 
       this.onOpen?.();
-      const peerId = this.isHost ? webRtcHostId(this.room) : undefined;
+      const hostPeerId = await webRtcHostId(this.room);
+      if (this.intentionalClose || this.failed) {
+        return;
+      }
+      this.rtcHostPeerId = hostPeerId;
+
+      const peerId = this.isHost ? hostPeerId : undefined;
       const peer = new global.Peer(peerId, webRtcPeerOptions());
       this.peer = peer;
 
@@ -675,7 +693,7 @@
     }
 
     openRtcGuestLink() {
-      const conn = this.peer.connect(webRtcHostId(this.room), {
+      const conn = this.peer.connect(this.rtcHostPeerId, {
         reliable: true,
         metadata: { name: this.name },
       });
@@ -907,10 +925,26 @@
     return `${protocol}//${location.host}/ws`;
   }
 
-  function webRtcHostId(room) {
-    return 'mcr' + String(room || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+  /**
+   * PeerJS 방 아이디. 공유 URL 의 방 토큰 원문은 넣지 않는다.
+   */
+  async function webRtcHostId(room) {
+    const material = 'mcr-web-console-webrtc-v1:' + String(room || '');
+    if (!global.crypto || !crypto.subtle || typeof crypto.subtle.digest !== 'function') {
+      throw new Error('이 브라우저는 공유 방 아이디를 만들 수 없습니다. Chrome 또는 Edge 의 https 페이지에서 여세요.');
+    }
+    const bytes = new TextEncoder().encode(material);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const hex = Array.from(new Uint8Array(digest), function (b) {
+      return b.toString(16).padStart(2, '0');
+    }).join('');
+    return 'mcr' + hex.slice(0, 29);
   }
 
+  /**
+   * STUN 으로 직접 붙고, 회사망 등에서 막히면 공개 TURN 으로 이어 준다.
+   * 출장 중 링크 하나로 사내 PC 가 보게 하려면 TURN 이 필요하다.
+   */
   function webRtcPeerOptions() {
     const turnAuth = {
       username: 'openrelayproject',
