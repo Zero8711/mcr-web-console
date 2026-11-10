@@ -334,6 +334,7 @@ public class ShareHttpServer
             "Content-Length: " + body.Length + "\r\n" +
             "Connection: close\r\n" +
             "Cache-Control: no-store\r\n" +
+            "Referrer-Policy: no-referrer\r\n" +
             "\r\n";
         var headBytes = Encoding.ASCII.GetBytes(head);
         stream.Write(headBytes, 0, headBytes.Length);
