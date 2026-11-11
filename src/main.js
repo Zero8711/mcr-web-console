@@ -163,6 +163,7 @@ function paneHooks() {
     },
     onAgingTriggered: (pane, keyword, fileName, triggerLine, timeText) => {
       showAbnormalAlert(pane, keyword, fileName, triggerLine, timeText);
+      postAgingChat(pane, keyword);
       if (!shareClient) {
         return;
       }
@@ -175,6 +176,7 @@ function paneHooks() {
           triggerLine: triggerLine,
           timeText: timeText,
           title: pane.title,
+          lastCommand: String(pane.lastCommand || '').trim(),
         })
       );
     },
@@ -687,6 +689,15 @@ async function requestNotifyPermission() {
   } catch {
     // 권한 요청을 막은 브라우저는 페이지 팝업만 사용
   }
+}
+
+function postAgingChat(pane, keyword) {
+  const text = ShareUtil.formatAgingChatNote(
+    pane?.title,
+    pane?.lastCommand,
+    keyword
+  );
+  ShareUtil.appendChatLine(els.chatLog, '안내', text, '');
 }
 
 function showAbnormalAlert(pane, keyword, fileName, triggerLine, timeText) {

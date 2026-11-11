@@ -1162,6 +1162,17 @@
     return (params.get('room') || '').trim();
   }
 
+  /**
+   * 이상로그가 채팅에 남길 한 줄. 마지막 명령과 맞은 키워드만 적는다.
+   */
+  function formatAgingChatNote(title, command, keyword) {
+    const who = String(title || '').trim();
+    const cmd = String(command || '').trim() || '(없음)';
+    const key = String(keyword || '').trim() || '(키워드 없음)';
+    const head = who ? who + ' · ' : '';
+    return head + '마지막 명령: ' + cmd + ' · 감지: ' + key;
+  }
+
   function appendChatLine(logEl, from, text, myName, kind) {
     if (!logEl) {
       return;
@@ -1534,6 +1545,7 @@
   global.ShareUtil = {
     makeRoomToken,
     roomFromLocation,
+    formatAgingChatNote,
     appendChatLine,
     appendChatFile,
     bindChatFileDrop,

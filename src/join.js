@@ -518,6 +518,12 @@ function handleGuestAging(kind, slot, text) {
   ensurePane(id, title);
   writeGuide('[이상로그] ' + title + " 에서 '" + keyword + "' 감지.", 'red');
   showAbnormalAlert(title, keyword, data.fileName, data.triggerLine, data.timeText);
+  ShareUtil.appendChatLine(
+    els.chatLog,
+    '안내',
+    ShareUtil.formatAgingChatNote(title, data.lastCommand, keyword),
+    ''
+  );
 }
 
 function showAbnormalAlert(title, keyword, fileName, triggerLine, timeText) {
