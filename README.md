@@ -6,6 +6,8 @@ Chrome / Edge 에서 장비 COM 을 여는 Tera Term 스타일 화면입니다.
 
 공식 주소: [https://zero8711.github.io/mcr-web-console/](https://zero8711.github.io/mcr-web-console/)
 
+변경 내역: [릴리스 노트](RELEASE.md)
+
 브라우저: **Chrome 또는 Edge**. Firefox, Safari, `file://` 는 안 됩니다.
 
 ---
@@ -213,3 +215,4 @@ Custom domain / CNAME 은 넣지 마세요.
 - 사내 배포는 `office-dist` 폴더를 통째로 복사합니다. 내용은 `pack-office.bat` 으로 다시 만듭니다.
 - `mcr_console.bat` 의 C# 을 바꾼 뒤에는 창을 닫고 다시 실행하세요.
 - 사용 폴더의 `README.txt` 는 시험팀 PC 용 짧은 안내입니다. 기능 설명은 이 파일을 보세요.
+- 날짜별 변경 내역은 [릴리스 노트](RELEASE.md) 를 보세요.
