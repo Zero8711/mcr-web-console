@@ -26,8 +26,8 @@
     const llm = workspace.querySelector('#llm-panel');
     const cmd = workspace.querySelector('#cmd-panel');
 
-    setup(workspace, consoles, chat, 'chat', '콘솔 · 채팅 너비');
-    setup(workspace, consoles, llm, 'llm', '로그 분석 너비');
+    setup(workspace, consoles, llm, 'llm', '콘솔 · 로그 분석 너비');
+    setup(workspace, consoles, chat, 'chat', '채팅 너비');
     setup(workspace, consoles, cmd, 'cmd', '명령 기록 너비');
 
     window.addEventListener('resize', function () {

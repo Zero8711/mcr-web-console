@@ -223,25 +223,6 @@
 
       <div class="workspace">
         <div id="console-stack" class="console-stack"></div>
-        <aside id="chat-panel" class="chat-panel idle">
-          <div class="chat-header">채팅 · 로그 파일 놓기</div>
-          <div id="chat-log" class="chat-log"></div>
-          <div class="side-empty" id="chat-empty">
-            <p class="side-empty-title">채팅</p>
-            <p class="side-empty-idle">공유를 시작하면 접속한 사람과 여기서 대화합니다. 로그 파일도 이 창에 놓을 수 있습니다.</p>
-            <p class="side-empty-live">아직 대화가 없습니다.</p>
-          </div>
-          <form id="chat-form" class="chat-form">
-            <input
-              id="txt-chat"
-              type="text"
-              spellcheck="false"
-              placeholder="공유를 시작하면 대화할 수 있습니다"
-              disabled
-            />
-            <button type="submit" class="btn" disabled>보내기</button>
-          </form>
-        </aside>
         <aside id="llm-panel" class="chat-panel llm-panel">
           <div class="chat-header">로그 분석 · Chrome 내장 AI 시험</div>
           <div class="llm-settings">
@@ -310,6 +291,25 @@
             <button id="btn-llm-analyze" type="button" class="btn btn-primary">이 칸 분석</button>
           </div>
         </aside>
+        <aside id="chat-panel" class="chat-panel idle">
+          <div class="chat-header">채팅 · 로그 파일 놓기</div>
+          <div id="chat-log" class="chat-log"></div>
+          <div class="side-empty" id="chat-empty">
+            <p class="side-empty-title">채팅</p>
+            <p class="side-empty-idle">공유를 시작하면 접속한 사람과 여기서 대화합니다. 로그 파일도 이 창에 놓을 수 있습니다.</p>
+            <p class="side-empty-live">아직 대화가 없습니다.</p>
+          </div>
+          <form id="chat-form" class="chat-form">
+            <input
+              id="txt-chat"
+              type="text"
+              spellcheck="false"
+              placeholder="공유를 시작하면 대화할 수 있습니다"
+              disabled
+            />
+            <button type="submit" class="btn" disabled>보내기</button>
+          </form>
+        </aside>
         <aside id="cmd-panel" class="chat-panel cmd-panel idle">
           <div class="chat-header">명령 기록</div>
           <div id="cmd-log" class="chat-log"></div>
@@ -357,7 +357,7 @@
     <script src="./src/dut-probe.js?v=20261103d"></script>
     <script src="./src/llm-analyze.js?v=20261103j"></script>
     <script src="./src/console-pane.js?v=20261103d"></script>
-    <script src="./src/panel-resize.js?v=20261103f"></script>
+    <script src="./src/panel-resize.js?v=20261111a"></script>
     <script src="./src/main.js?v=20261103f"></script>
   </body>
 </html>
