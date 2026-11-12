@@ -22,6 +22,7 @@ const els = {
   agingTarget: document.getElementById('aging-target'),
   agingHitList: document.getElementById('aging-hit-list'),
   agingHitClear: document.getElementById('btn-aging-hit-clear'),
+  oopsSample: document.getElementById('btn-oops-sample'),
   logStatusDot: document.getElementById('log-status-dot'),
   logStatusText: document.getElementById('log-status-text'),
   quickCommands: document.getElementById('quick-commands'),
@@ -185,6 +186,9 @@ function paneHooks() {
         renderAgingHits(list);
       }
       scheduleAgingHitsShare(pane);
+    },
+    onOopsHint: (pane, hint) => {
+      postOopsHint(pane, hint);
     },
   };
 }
@@ -409,6 +413,16 @@ els.logStop.addEventListener('click', () => {
 if (els.agingHitClear) {
   els.agingHitClear.addEventListener('click', () => {
     currentPane()?.agingLog?.clearHits();
+  });
+}
+
+if (els.oopsSample) {
+  els.oopsSample.addEventListener('click', () => {
+    const pane = currentPane();
+    if (!pane || !pane.playOopsSample()) {
+      return;
+    }
+    pane.term.writeln('\x1b[33m[안내] Call Trace 샘플입니다. 약 1초 뒤 채팅·분석 칸을 보세요.\x1b[0m');
   });
 }
 
@@ -698,6 +712,29 @@ function postAgingChat(pane, keyword) {
     keyword
   );
   ShareUtil.appendChatLine(els.chatLog, '안내', text, '');
+}
+
+function postOopsHint(pane, hint) {
+  if (!hint || !hint.text) {
+    return;
+  }
+  const title = String(pane?.title || '').trim();
+  const text = title ? title + '\n' + hint.text : hint.text;
+  ShareUtil.appendChatLine(els.chatLog, '안내', text, '');
+  appendLlmLine('안내', text);
+  if (!shareClient) {
+    return;
+  }
+  shareClient.sendAging(
+    'oops',
+    pane.id,
+    JSON.stringify({
+      title: pane.title,
+      symbol: hint.symbol,
+      name: hint.name,
+      text: hint.text,
+    })
+  );
 }
 
 function showAbnormalAlert(pane, keyword, fileName, triggerLine, timeText) {

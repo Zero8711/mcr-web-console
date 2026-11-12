@@ -249,6 +249,23 @@
       this.sessionLog.ingest(text);
     }
 
+    /**
+     * COM 없이 가짜 Call Trace 를 화면에 넣고,
+     * 채팅·분석 칸 안내가 뜨는지 확인한다.
+     */
+    playOopsSample() {
+      if (!this.agingLog || typeof OopsHint === 'undefined') {
+        return false;
+      }
+      const dump = OopsHint.SAMPLE;
+      this.writeIncoming(dump);
+      this.agingLog.lastOopsSymbol = '';
+      this.agingLog.ingest(dump);
+      this.hooks.onShareLog?.(this, dump);
+      this.notifyRx(dump);
+      return true;
+    }
+
     addRxListener(fn) {
       if (typeof fn !== 'function') {
         return;
@@ -447,6 +464,9 @@
       };
       this.agingLog.onHitsChange = (list) => {
         this.hooks.onAgingHits?.(this, list);
+      };
+      this.agingLog.onOopsHint = (hint) => {
+        this.hooks.onOopsHint?.(this, hint);
       };
       this.agingLog.onFinished = (fileName, reason, afterCount) => {
         this.term.writeln('');

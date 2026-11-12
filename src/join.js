@@ -502,6 +502,21 @@ function handleGuestAging(kind, slot, text) {
     return;
   }
 
+  if (kind === 'oops') {
+    let oops = {};
+    try {
+      oops = JSON.parse(text || '{}');
+    } catch {
+      oops = {};
+    }
+    const title = oops.title || ('장비 ' + id);
+    const body = oops.text
+      ? title + '\n' + oops.text
+      : ShareUtil.formatAgingChatNote(title, '', oops.name || oops.symbol);
+    ShareUtil.appendChatLine(els.chatLog, '안내', body, '');
+    return;
+  }
+
   if (kind !== 'alert') {
     return;
   }

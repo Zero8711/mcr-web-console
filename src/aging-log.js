@@ -41,6 +41,9 @@
       this.onHitsChange = null;
       this.onFinished = null;
       this.onError = null;
+      this.onOopsHint = null;
+      this.oopsTimer = null;
+      this.lastOopsSymbol = '';
     }
 
     static isSupported() {
@@ -162,6 +165,11 @@
     async resetSession() {
       await this.flushAndStop();
       this.recentLines = [];
+      this.lastOopsSymbol = '';
+      if (this.oopsTimer) {
+        clearTimeout(this.oopsTimer);
+        this.oopsTimer = null;
+      }
       this.resetLineBuffer();
       this.notify();
     }
@@ -268,6 +276,7 @@
 
     handleCompleteLine(line) {
       this.pushRecent(line);
+      this.noteOopsLine(line);
 
       if (this.enabled) {
         this.noteHits(line);
@@ -476,6 +485,35 @@
           this.finishing = false;
           this.onError?.(err);
         });
+    }
+
+    /**
+     * Call Trace / panic 줄이 보이면 조금 기다렸다가
+     * 스택이 다 찍힌 뒤 마지막 함수를 고른다.
+     */
+    noteOopsLine(line) {
+      if (typeof OopsHint === 'undefined' || !OopsHint.looksLikeOopsLine(line)) {
+        return;
+      }
+      if (this.oopsTimer) {
+        clearTimeout(this.oopsTimer);
+      }
+      this.oopsTimer = setTimeout(() => {
+        this.oopsTimer = null;
+        this.emitOopsHint();
+      }, 900);
+    }
+
+    emitOopsHint() {
+      if (typeof OopsHint === 'undefined') {
+        return;
+      }
+      const hint = OopsHint.parse(this.recentLines.join('\n'));
+      if (!hint || hint.symbol === this.lastOopsSymbol) {
+        return;
+      }
+      this.lastOopsSymbol = hint.symbol;
+      this.onOopsHint?.(hint);
     }
 
     pushRecent(line) {

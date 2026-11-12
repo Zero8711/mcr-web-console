@@ -119,6 +119,14 @@
         <div class="aging-hit-heading">이상로그 발생</div>
         <div id="aging-hit-list" class="aging-hit-list"></div>
         <button id="btn-aging-hit-clear" type="button" class="btn" disabled>횟수 지우기</button>
+        <button
+          id="btn-oops-sample"
+          type="button"
+          class="btn"
+          title="COM 없이 가짜 Call Trace 를 넣어, 채팅과 로그 분석 칸에 마지막 함수 안내가 뜨는지 확인합니다."
+        >
+          Call Trace 샘플
+        </button>
       </div>
 
       <header class="toolbar toolbar-commands">
@@ -347,7 +355,8 @@
     <script src="./vendor/addon-fit.js"></script>
     <script src="./src/serial.js"></script>
     <script src="./src/term-text.js?v=20261030h"></script>
-    <script src="./src/aging-log.js?v=20261030h"></script>
+    <script src="./src/oops-hint.js?v=20261112b"></script>
+    <script src="./src/aging-log.js?v=20261112a"></script>
     <script src="./src/commands.js?v=20261030f"></script>
     <script src="./src/log-view.js?v=20261002c"></script>
     <script src="./vendor/peerjs.min.js"></script>
@@ -356,8 +365,8 @@
     <script src="./src/session-log.js?v=20261030h"></script>
     <script src="./src/dut-probe.js?v=20261103d"></script>
     <script src="./src/llm-analyze.js?v=20261103j"></script>
-    <script src="./src/console-pane.js?v=20261103d"></script>
+    <script src="./src/console-pane.js?v=20261112b"></script>
     <script src="./src/panel-resize.js?v=20261111a"></script>
-    <script src="./src/main.js?v=20261111d"></script>
+    <script src="./src/main.js?v=20261112b"></script>
   </body>
 </html>
