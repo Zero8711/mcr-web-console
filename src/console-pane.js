@@ -257,6 +257,8 @@
       if (!this.agingLog || typeof OopsHint === 'undefined') {
         return false;
       }
+      this.everOpened = true;
+      this.syncEmpty();
       const dump = OopsHint.SAMPLE;
       this.writeIncoming(dump);
       this.agingLog.lastOopsSymbol = '';
