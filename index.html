@@ -234,16 +234,16 @@
         <aside id="llm-panel" class="chat-panel llm-panel">
           <div class="chat-header">콘솔 LLM</div>
           <div class="llm-settings">
-            <p id="llm-trial-note" class="llm-trial-note">Chrome 내장 AI 상태를 확인하는 중…</p>
+            <p id="llm-trial-note" class="llm-trial-note">NVIDIA 기본 모델을 준비하는 중…</p>
             <label class="checkbox" title="pwd·PATH·ls 만 보냅니다. 콘솔 화면·공유·이상로그에는 찍히지 않습니다.">
               <input id="chk-llm-probe-device" type="checkbox" checked />
               질문·분석 때 장비에서 경로·명령 확인
             </label>
             <details class="llm-api-details">
-              <summary>유료 API (지금은 접어둠)</summary>
+              <summary>다른 모델 쓰기 (기본은 NVIDIA)</summary>
               <p class="llm-trial-note">
-                NVIDIA 는 GitHub Pages 에서 중계(Cloudflare Worker)가 필요합니다.
-                중계 주소에 https://이름.workers.dev 를 넣으세요. bat 로 열면 이 PC 가 중계합니다.
+                시험자는 비워 두세요. 주소·모델은 NVIDIA 기본값입니다.
+                API 키는 페이지에 넣지 않고 Cloudflare Worker 비밀값으로 둡니다.
               </p>
               <label>
                 API 주소
@@ -281,7 +281,7 @@
                   id="txt-llm-key"
                   type="password"
                   spellcheck="false"
-                  placeholder="이 브라우저에만 저장"
+                  placeholder="비워 두면 기본 키"
                   autocomplete="off"
                 />
               </label>
@@ -291,8 +291,7 @@
           <div class="side-empty" id="llm-empty">
             <p class="side-empty-title">콘솔 LLM</p>
             <p class="side-empty-live">
-              페이지를 한 번 클릭하면 모델을 받기 시작합니다. 그동안 COM 을 연결하세요.
-              받은 뒤 [이 칸 분석] 또는 [묻기]를 누르면 답합니다.
+              COM 을 연결한 뒤 [이 칸 분석] 또는 [묻기]를 누르면 NVIDIA 가 화면을 설명합니다.
             </p>
           </div>
           <form id="llm-ask-form" class="chat-form llm-ask">
@@ -374,9 +373,9 @@
     <script src="./src/console-find.js?v=20260901m"></script>
     <script src="./src/session-log.js?v=20261030h"></script>
     <script src="./src/dut-probe.js?v=20261113a"></script>
-    <script src="./src/llm-analyze.js?v=20261113d"></script>
+    <script src="./src/llm-analyze.js?v=20261113f"></script>
     <script src="./src/console-pane.js?v=20261113a"></script>
     <script src="./src/panel-resize.js?v=20261113a"></script>
-    <script src="./src/main.js?v=20261113b"></script>
+    <script src="./src/main.js?v=20261113d"></script>
   </body>
 </html>

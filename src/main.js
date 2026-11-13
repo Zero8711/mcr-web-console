@@ -952,10 +952,6 @@ function bindLlmAnalyze() {
   }
 
   const saved = LlmAnalyze.loadSettings();
-  if (!saved.apiKey) {
-    saved.endpoint = '';
-    LlmAnalyze.saveSettings(saved);
-  }
   if (els.llmEndpoint) {
     els.llmEndpoint.value = saved.endpoint;
   }
@@ -976,16 +972,22 @@ function bindLlmAnalyze() {
     LlmAnalyze.saveSettings(readLlmSettingsFromForm());
   };
 
-  els.llmEndpoint?.addEventListener('change', persist);
+  els.llmEndpoint?.addEventListener('change', () => {
+    persist();
+    refreshLlmStatusNote();
+  });
   els.llmModel?.addEventListener('change', persist);
-  els.llmProxy?.addEventListener('change', persist);
+  els.llmProxy?.addEventListener('change', () => {
+    persist();
+    refreshLlmStatusNote();
+  });
   els.llmKey?.addEventListener('change', () => {
     persist();
-    refreshLlmChromeNote();
+    refreshLlmStatusNote();
   });
   els.llmProbeDevice?.addEventListener('change', persist);
   els.llmAnalyze?.addEventListener('click', () => {
-    runLlmAnalyze(currentPane(), readLlmQuestion(), true);
+    runLlmAnalyze(currentPane(), readLlmQuestion());
   });
   els.llmAskForm?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -994,88 +996,26 @@ function bindLlmAnalyze() {
       els.llmQuestion?.focus();
       return;
     }
-    runLlmAnalyze(currentPane(), question, true);
+    runLlmAnalyze(currentPane(), question);
   });
 
-  refreshLlmChromeNote();
-  bindChromeModelPrefetch();
+  refreshLlmStatusNote();
 }
 
-function bindChromeModelPrefetch() {
-  if (typeof LlmAnalyze === 'undefined' || !LlmAnalyze.prefetchChromeAi) {
-    return;
-  }
-
-  const start = () => {
-    const settings = readLlmSettingsFromForm();
-    if (!LlmAnalyze.isTrialMode(settings) || !LlmAnalyze.hasChromePromptApi()) {
-      return;
-    }
-    if (LlmAnalyze.isChromeSessionReady()) {
-      return;
-    }
-
-    LlmAnalyze.prefetchChromeAi({
-      onProgress: showChromeDownloadProgress,
-    })
-      .then(() => {
-        refreshLlmChromeNote();
-      })
-      .catch((err) => {
-        if (els.llmTrialNote) {
-          els.llmTrialNote.textContent = err.message || String(err);
-        }
-      });
-  };
-
-  document.addEventListener('pointerdown', function onFirstClick(event) {
-    if (!event.isTrusted) {
-      return;
-    }
-    document.removeEventListener('pointerdown', onFirstClick, true);
-    start();
-  }, true);
-}
-
-function showChromeDownloadProgress(loaded) {
-  if (!els.llmTrialNote) {
-    return;
-  }
-  const pct = Math.round(Math.min(1, Math.max(0, Number(loaded) || 0)) * 100);
-  els.llmTrialNote.textContent =
-    'Chrome 내장 모델 받는 중… ' + pct + '% · 그동안 COM 연결·명령은 그대로 하세요.';
-}
-
-function refreshLlmChromeNote() {
+function refreshLlmStatusNote() {
   if (!els.llmTrialNote || typeof LlmAnalyze === 'undefined') {
     return;
   }
 
   const settings = readLlmSettingsFromForm();
-  if (!LlmAnalyze.isTrialMode(settings)) {
-    els.llmTrialNote.textContent = '유료 API 키를 쓰므로 Chrome 내장 AI 는 쓰지 않습니다.';
+  const error = LlmAnalyze.configError(settings);
+  if (error) {
+    els.llmTrialNote.textContent = error;
     return;
   }
-
-  if (LlmAnalyze.isChromeSessionReady()) {
-    els.llmTrialNote.textContent = 'Chrome 내장 AI(Gemini Nano)를 이 칸에서 씁니다. API 키는 필요 없습니다.';
-    return;
-  }
-
-  if (LlmAnalyze.isChromeDownloading && LlmAnalyze.isChromeDownloading()) {
-    return;
-  }
-
-  LlmAnalyze.probeChromeAi().then((info) => {
-    if (!els.llmTrialNote) {
-      return;
-    }
-    if (LlmAnalyze.isChromeSessionReady()) {
-      els.llmTrialNote.textContent = 'Chrome 내장 AI(Gemini Nano)를 이 칸에서 씁니다. API 키는 필요 없습니다.';
-      return;
-    }
-    els.llmTrialNote.textContent = info.message;
-  });
+  els.llmTrialNote.textContent = settings.apiKey
+    ? '입력한 API 키로 모델을 씁니다.'
+    : 'NVIDIA 기본 모델을 씁니다. 주소·모델·키는 넣지 않아도 됩니다.';
 }
 
 function readLlmSettingsFromForm() {
@@ -1100,7 +1040,7 @@ function llmUserLabel(question) {
   return '화면 분석';
 }
 
-function runLlmAnalyze(pane, question, allowDownload) {
+function runLlmAnalyze(pane, question) {
   if (!els.llmLog || llmAnalyzeBusy) {
     return;
   }
@@ -1108,7 +1048,6 @@ function runLlmAnalyze(pane, question, allowDownload) {
   const settings = readLlmSettingsFromForm();
   LlmAnalyze.saveSettings(settings);
   const ask = String(question || '').trim();
-  const canDownload = allowDownload !== false;
 
   llmAnalyzeBusy = true;
   if (els.llmAnalyze) {
@@ -1119,14 +1058,9 @@ function runLlmAnalyze(pane, question, allowDownload) {
   }
 
   const shouldProbe = settings.probeDevice !== false;
-  let waiting = '분석 중… 화면 로그를 모델에 보냅니다.';
-  if (shouldProbe) {
-    waiting = '장비에서 경로와 명령을 확인하는 중…';
-  } else if (LlmAnalyze.isTrialMode(settings)) {
-    waiting = canDownload && LlmAnalyze.hasChromePromptApi()
-      ? 'Chrome 내장 AI 에 묻는 중…'
-      : '화면을 읽는 중… (Chrome 내장 AI / 유료 API 없음)';
-  }
+  const waiting = shouldProbe
+    ? '장비에서 경로와 명령을 확인하는 중…'
+    : '분석 중… 화면 로그를 모델에 보냅니다.';
 
   beginLlmTurn(llmUserLabel(ask), waiting);
   if (ask && els.llmQuestion) {
@@ -1134,19 +1068,14 @@ function runLlmAnalyze(pane, question, allowDownload) {
   }
 
   LlmAnalyze.analyzePane(pane, settings, ask, {
-    allowDownload: canDownload,
     probe: shouldProbe,
     onStatus: (text) => {
       updateLlmPending(text, false);
     },
-    onProgress: (loaded) => {
-      const pct = Math.round(Math.min(1, Math.max(0, Number(loaded) || 0)) * 100);
-      updateLlmPending('Chrome 내장 모델 받는 중… ' + pct + '%', false);
-    },
   })
     .then((text) => {
       finishLlmTurn(text, false);
-      refreshLlmChromeNote();
+      refreshLlmStatusNote();
     })
     .catch((err) => {
       finishLlmTurn(err.message || String(err), true);

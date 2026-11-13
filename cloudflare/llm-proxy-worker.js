@@ -2,8 +2,10 @@
  * GitHub Pages 에서 NVIDIA API 를 쓰기 위한 HTTPS 중계.
  * Cloudflare Workers 대시보드에 이 파일 내용을 붙여 넣고 Deploy 한다.
  *
- * 브라우저(github.io) → 이 Worker → integrate.api.nvidia.com
- * 키는 브라우저가 보낸 Authorization 을 그대로 넘긴다. 여기에 키를 넣지 않는다.
+ * 키는 페이지에 넣지 않는다. Worker 설정 → Variables and Secrets 에서
+ * 이름 NVIDIA_API_KEY, 종류 Secret 으로 NVIDIA 키를 넣는다.
+ *
+ * 브라우저가 키를 보내면 그 키를 쓰고, 안 보내면 이 비밀값을 쓴다.
  */
 const ALLOW_ORIGINS = [
   'https://zero8711.github.io',
@@ -17,7 +19,16 @@ function isAllowedHost(host) {
 }
 
 function isAllowedOrigin(origin) {
-  return ALLOW_ORIGINS.indexOf(origin) >= 0;
+  if (ALLOW_ORIGINS.indexOf(origin) >= 0) {
+    return true;
+  }
+  try {
+    const url = new URL(origin);
+    const local = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    return url.protocol === 'http:' && local && url.port === '8765';
+  } catch {
+    return false;
+  }
 }
 
 function corsHeaders(origin) {
@@ -38,8 +49,19 @@ function json(origin, status, obj) {
   });
 }
 
+function bearer(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+  if (/^Bearer\s+/i.test(text)) {
+    return text;
+  }
+  return 'Bearer ' + text;
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
 
     if (request.method === 'OPTIONS') {
@@ -73,10 +95,14 @@ export default {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
-    const auth = request.headers.get('Authorization');
-    if (auth) {
-      headers.Authorization = auth;
+    const auth = bearer(request.headers.get('Authorization')) ||
+      bearer(env && env.NVIDIA_API_KEY);
+    if (!auth) {
+      return json(origin, 401, {
+        error: 'API 키가 없습니다. Worker 비밀값 NVIDIA_API_KEY 를 넣으세요.',
+      });
     }
+    headers.Authorization = auth;
 
     let upstream;
     try {
