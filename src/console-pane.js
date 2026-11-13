@@ -46,6 +46,7 @@
       this.rxListeners = [];
       this.commandFacts = null;
       this.probeBusy = null;
+      this.probeSilent = false;
 
       this.root = document.createElement('section');
       this.root.className = 'console-pane';
@@ -419,6 +420,10 @@
       }
 
       this.serial.onData = (text) => {
+        if (this.probeSilent) {
+          this.notifyRx(text);
+          return;
+        }
         this.writeIncoming(text);
         this.agingLog.ingest(text);
         this.hooks.onShareLog?.(this, text);
@@ -486,14 +491,19 @@
       };
     }
 
-    writeRaw(data) {
+    setProbeSilent(on) {
+      this.probeSilent = Boolean(on);
+    }
+
+    writeRaw(data, options) {
       const text = stripHangulForConsole(data);
       if (!text) {
         return;
       }
+      const quiet = Boolean(options && options.quiet);
       const applyNewline = this.hooks.applyNewline;
       const payload = applyNewline(text, this.hooks.getNewline());
-      if (this.hooks.getEcho()) {
+      if (!quiet && this.hooks.getEcho()) {
         this.hooks.echoLocal(this, payload);
       }
       this.serial.write(payload).catch((err) => {
@@ -509,7 +519,7 @@
       if (!options || !options.quiet) {
         this.noteLastCommand(body);
       }
-      this.writeRaw(`${body}\n`);
+      this.writeRaw(`${body}\n`, options);
     }
 
     writeKeys(text) {

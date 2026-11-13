@@ -1,10 +1,11 @@
 /**
  * 분석 칸이 화면만 보지 않고, 장비 셸에서 경로와 명령을 확인한다.
- * pwd / PATH / ls / busybox --list 만 보내며, 설정을 바꾸거나 재부팅하지 않는다.
+ * pwd / PATH / ls 만 보낸다. busybox --list 는 장비마다 에러가 나 빼 둔다.
+ * 응답은 콘솔·공유·이상로그에 찍지 않는다.
  */
 (function (global) {
   const PROBE_COMMAND =
-    'pwd; echo --PATH--; echo $PATH; echo --LS--; ls; echo --BB--; busybox --list';
+    'pwd; echo --PATH--; echo $PATH; echo --LS--; ls';
   const CACHE_MS = 60 * 1000;
   const TIMEOUT_MS = 8000;
   const PATH_MARK = '--PATH--';
@@ -88,6 +89,9 @@
         if (leftover) {
           lines.push(leftover);
         }
+        window.setTimeout(function () {
+          pane.setProbeSilent?.(false);
+        }, 120);
         resolve({ text: lines.join('\n'), timedOut: Boolean(timedOut) });
       }
 
@@ -105,14 +109,20 @@
         finish(true);
       }, timeoutMs);
 
+      pane.setProbeSilent?.(true);
       pane.addRxListener(onChunk);
-      pane.writeLine(command, { quiet: true });
+      try {
+        pane.writeLine(command, { quiet: true });
+      } catch (err) {
+        pane.setProbeSilent?.(false);
+        throw err;
+      }
     });
   }
 
   function hasProbeFinished(lines, current) {
     const joined = lines.concat(current || '').join('\n');
-    if (joined.indexOf(BB_MARK) < 0 && joined.indexOf(PATH_MARK) < 0) {
+    if (joined.indexOf(PATH_MARK) < 0 && joined.indexOf(LS_MARK) < 0) {
       return false;
     }
     return isShellPromptLine(current) || isShellPromptLine(lines[lines.length - 1]);
@@ -121,8 +131,8 @@
   function parseProbeOutput(raw, command) {
     const text = String(raw || '');
     const pathBlock = sliceMark(text, PATH_MARK, LS_MARK);
-    const lsBlock = sliceMark(text, LS_MARK, BB_MARK);
-    const bbBlock = sliceMark(text, BB_MARK, '');
+    const lsBlock = sliceMark(text, LS_MARK, '');
+    const bbBlock = '';
     const pwdBlock = text.split(PATH_MARK)[0] || '';
 
     const cwd = pickCwd(dropNoise(pwdBlock, command));

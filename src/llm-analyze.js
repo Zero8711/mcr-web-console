@@ -20,6 +20,9 @@
   const LLM_PROXY_URL_DEFAULT = '';
   const MAX_LOG_LINES = 80;
   const MAX_SCAN_LINES = 400;
+  const MAX_ASK_LOG_LINES = 1200;
+  const MAX_ASK_SCAN_LINES = 5000;
+  const MAX_CHROME_ASK_LINES = 400;
   const CHROME_NEED_CLICK = 'CHROME_AI_NEED_CLICK';
   const CHROME_UNAVAILABLE = 'CHROME_AI_UNAVAILABLE';
 
@@ -144,11 +147,12 @@
 
     const ask = String(question || '').trim();
     const hint = options || {};
-    const rawLog = pane.getRecentLog(MAX_SCAN_LINES);
+    const scanLimit = ask ? MAX_ASK_SCAN_LINES : MAX_SCAN_LINES;
+    const rawLog = pane.getRecentLog(scanLimit);
     if (!rawLog.trim()) {
       throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
     }
-    const sliced = sliceLastCommand(rawLog, pane.lastCommand);
+    const sliced = sliceLastCommand(rawLog, pane.lastCommand, logLineLimit(ask, settings));
     const command = sliced.command;
     const logText = sliced.text;
     const probeFacts = await maybeProbeDevice(pane, ask, hint);
@@ -603,13 +607,25 @@
     return facts;
   }
 
+  function logLineLimit(ask, settings) {
+    if (!ask) {
+      return MAX_LOG_LINES;
+    }
+    if (isTrialMode(settings)) {
+      return MAX_CHROME_ASK_LINES;
+    }
+    return MAX_ASK_LOG_LINES;
+  }
+
   /**
    * 마지막 사용자 명령 줄부터 다음 프롬프트 전까지.
    * 이전 ifconfig/brctl/ps 출력은 넣지 않는다.
+   * dmesg 처럼 긴 출력은 maxLines 만큼 명령 앞부분부터 보낸다.
    */
-  function sliceLastCommand(logText, typedCommand) {
+  function sliceLastCommand(logText, typedCommand, maxLines) {
     const cleaned = stripProbeBlocks(String(logText || ''));
     const lines = cleaned.split(/\n/);
+    const limit = Math.max(8, Number(maxLines) || MAX_LOG_LINES);
     let start = findLastPromptCommandIndex(lines);
     let command = '';
 
@@ -622,7 +638,7 @@
     }
 
     if (start < 0) {
-      const from = Math.max(0, lines.length - 8);
+      const from = Math.max(0, lines.length - limit);
       return {
         command: command,
         text: trimLogLines(lines.slice(from)).join('\n'),
@@ -637,7 +653,7 @@
       }
     }
 
-    const clipped = trimLogLines(lines.slice(start, Math.min(end, start + MAX_LOG_LINES)));
+    const clipped = trimLogLines(lines.slice(start, Math.min(end, start + limit)));
     return {
       command: command,
       text: clipped.join('\n'),
