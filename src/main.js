@@ -65,7 +65,6 @@ const els = {
   llmModel: document.getElementById('txt-llm-model'),
   llmKey: document.getElementById('txt-llm-key'),
   llmProxy: document.getElementById('txt-llm-proxy'),
-  llmAfterCommand: document.getElementById('chk-llm-after-command'),
   llmProbeDevice: document.getElementById('chk-llm-probe-device'),
   llmLog: document.getElementById('llm-log'),
   llmAnalyze: document.getElementById('btn-llm-analyze'),
@@ -137,7 +136,6 @@ function paneHooks() {
     onPaste: (pane) => pasteFromClipboard(pane),
     onShareLog: (pane, text) => shareClient?.sendLog(text, pane.id),
     onShareCmdLog: (pane, text) => shareClient?.sendCmdLog(text, pane.id),
-    onCommandSent: (pane) => scheduleLlmAnalyze(pane),
     onMetaChange: (pane) => {
       broadcastConsoles();
       if (pane === currentPane()) {
@@ -945,7 +943,6 @@ function sendConsoleCommand(command, options) {
   pane.focus();
 }
 
-const llmAnalyzeTimers = {};
 let llmAnalyzeBusy = false;
 let llmPendingRow = null;
 
@@ -971,9 +968,6 @@ function bindLlmAnalyze() {
   if (els.llmProxy) {
     els.llmProxy.value = saved.proxyUrl || '';
   }
-  if (els.llmAfterCommand) {
-    els.llmAfterCommand.checked = saved.afterCommand;
-  }
   if (els.llmProbeDevice) {
     els.llmProbeDevice.checked = saved.probeDevice !== false;
   }
@@ -989,10 +983,9 @@ function bindLlmAnalyze() {
     persist();
     refreshLlmChromeNote();
   });
-  els.llmAfterCommand?.addEventListener('change', persist);
   els.llmProbeDevice?.addEventListener('change', persist);
   els.llmAnalyze?.addEventListener('click', () => {
-    runLlmAnalyze(currentPane(), readLlmQuestion(), true, 'button');
+    runLlmAnalyze(currentPane(), readLlmQuestion(), true);
   });
   els.llmAskForm?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1001,7 +994,7 @@ function bindLlmAnalyze() {
       els.llmQuestion?.focus();
       return;
     }
-    runLlmAnalyze(currentPane(), question, true, 'ask');
+    runLlmAnalyze(currentPane(), question, true);
   });
 
   refreshLlmChromeNote();
@@ -1091,48 +1084,23 @@ function readLlmSettingsFromForm() {
     model: String(els.llmModel?.value || '').trim(),
     apiKey: String(els.llmKey?.value || '').trim(),
     proxyUrl: String(els.llmProxy?.value || '').trim(),
-    afterCommand: Boolean(els.llmAfterCommand?.checked),
     probeDevice: els.llmProbeDevice ? Boolean(els.llmProbeDevice.checked) : true,
   };
-}
-
-function scheduleLlmAnalyze(pane) {
-  if (!pane || !els.llmAfterCommand?.checked) {
-    return;
-  }
-
-  const settings = readLlmSettingsFromForm();
-  if (LlmAnalyze.configError(settings)) {
-    return;
-  }
-
-  const id = pane.id;
-  if (llmAnalyzeTimers[id]) {
-    clearTimeout(llmAnalyzeTimers[id]);
-  }
-
-  llmAnalyzeTimers[id] = setTimeout(() => {
-    llmAnalyzeTimers[id] = null;
-    runLlmAnalyze(pane, '', false, 'auto');
-  }, 3000);
 }
 
 function readLlmQuestion() {
   return String(els.llmQuestion?.value || '').trim();
 }
 
-function llmUserLabel(question, source) {
+function llmUserLabel(question) {
   const ask = String(question || '').trim();
   if (ask) {
     return ask;
   }
-  if (source === 'auto') {
-    return '자동 분석';
-  }
   return '화면 분석';
 }
 
-function runLlmAnalyze(pane, question, allowDownload, source) {
+function runLlmAnalyze(pane, question, allowDownload) {
   if (!els.llmLog || llmAnalyzeBusy) {
     return;
   }
@@ -1150,7 +1118,7 @@ function runLlmAnalyze(pane, question, allowDownload, source) {
     els.llmAsk.disabled = true;
   }
 
-  const shouldProbe = source !== 'auto' && settings.probeDevice !== false;
+  const shouldProbe = settings.probeDevice !== false;
   let waiting = '분석 중… 화면 로그를 모델에 보냅니다.';
   if (shouldProbe) {
     waiting = '장비에서 경로와 명령을 확인하는 중…';
@@ -1160,7 +1128,7 @@ function runLlmAnalyze(pane, question, allowDownload, source) {
       : '화면을 읽는 중… (Chrome 내장 AI / 유료 API 없음)';
   }
 
-  beginLlmTurn(llmUserLabel(ask, source), waiting);
+  beginLlmTurn(llmUserLabel(ask), waiting);
   if (ask && els.llmQuestion) {
     els.llmQuestion.value = '';
   }

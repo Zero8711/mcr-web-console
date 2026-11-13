@@ -10,7 +10,6 @@
   const MODEL_KEY = 'llm-model';
   const API_KEY_KEY = 'llm-api-key';
   const PROXY_URL_KEY = 'llm-proxy-url';
-  const AFTER_CMD_KEY = 'llm-after-command';
   const PROBE_KEY = 'llm-probe-device';
   /**
    * Cloudflare Worker 주소. 끝에 / 없이.
@@ -46,7 +45,6 @@
       model: readStore(MODEL_KEY) || '',
       apiKey: readStore(API_KEY_KEY) || '',
       proxyUrl: readStore(PROXY_URL_KEY) || LLM_PROXY_URL_DEFAULT,
-      afterCommand: readStore(AFTER_CMD_KEY) !== '0',
       probeDevice: readStore(PROBE_KEY) !== '0',
     };
   }
@@ -56,7 +54,6 @@
     writeStore(MODEL_KEY, settings.model || '');
     writeStore(API_KEY_KEY, settings.apiKey || '');
     writeStore(PROXY_URL_KEY, settings.proxyUrl || '');
-    writeStore(AFTER_CMD_KEY, settings.afterCommand ? '1' : '0');
     writeStore(PROBE_KEY, settings.probeDevice === false ? '0' : '1');
   }
 

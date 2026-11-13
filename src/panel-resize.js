@@ -1,5 +1,5 @@
 /**
- * 콘솔 옆 채팅·로그 분석·명령 기록 칸의 너비를 드래그로 조절한다.
+ * 콘솔 옆 채팅·콘솔 LLM·명령 기록 칸의 너비를 드래그로 조절한다.
  * 콘솔 칸은 남은 폭을 쓰고, 값은 이 브라우저에만 저장한다.
  */
 (function (global) {
@@ -26,7 +26,7 @@
     const llm = workspace.querySelector('#llm-panel');
     const cmd = workspace.querySelector('#cmd-panel');
 
-    setup(workspace, consoles, llm, 'llm', '콘솔 · 로그 분석 너비');
+    setup(workspace, consoles, llm, 'llm', '콘솔 · LLM 너비');
     setup(workspace, consoles, chat, 'chat', '채팅 너비');
     setup(workspace, consoles, cmd, 'cmd', '명령 기록 너비');
 
