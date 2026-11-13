@@ -115,6 +115,27 @@ public class ShareHttpServer
                 return;
             }
 
+            if (path == "/api/llm-proxy")
+            {
+                if (method != "POST")
+                {
+                    WriteHttp(stream, 405, "application/json; charset=utf-8", "{\"error\":\"POST 만 됩니다.\"}");
+                    return;
+                }
+
+                var body = ReadHttpBody(stream, headers, leftover);
+                int status;
+                string contentType;
+                var json = ForwardLlm(
+                    body,
+                    GetHeader(headers, "X-Llm-Target"),
+                    GetHeader(headers, "Authorization"),
+                    out status,
+                    out contentType);
+                WriteHttp(stream, status, contentType, json);
+                return;
+            }
+
             if (path == "/")
             {
                 path = "/index.html";
@@ -340,6 +361,124 @@ public class ShareHttpServer
         stream.Write(headBytes, 0, headBytes.Length);
         stream.Write(body, 0, body.Length);
         stream.Flush();
+    }
+
+    /// <summary>
+    /// NVIDIA 처럼 브라우저 CORS 를 막는 모델을, 이 PC 가 대신 호출한다.
+    /// 주소는 https + 허용 호스트만. 키는 로그에 남기지 않는다.
+    /// </summary>
+    private static string ForwardLlm(
+        string body,
+        string target,
+        string authorization,
+        out int status,
+        out string contentType)
+    {
+        status = 400;
+        contentType = "application/json; charset=utf-8";
+
+        Uri uri;
+        if (!Uri.TryCreate(target, UriKind.Absolute, out uri) ||
+            uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return "{\"error\":\"모델 주소가 올바르지 않습니다.\"}";
+        }
+
+        if (!IsAllowedLlmHost(uri.Host))
+        {
+            return "{\"error\":\"이 모델 주소는 중계할 수 없습니다.\"}";
+        }
+
+        EnableTls12();
+
+        try
+        {
+            var req = (HttpWebRequest)WebRequest.Create(uri);
+            req.Method = "POST";
+            req.ContentType = "application/json";
+            req.Accept = "application/json";
+            req.Timeout = 180000;
+            req.ReadWriteTimeout = 180000;
+            req.UserAgent = "mcr-web-console";
+            if (!string.IsNullOrEmpty(authorization))
+            {
+                req.Headers[HttpRequestHeader.Authorization] = authorization;
+            }
+
+            var payload = Encoding.UTF8.GetBytes(body ?? "");
+            req.ContentLength = payload.Length;
+            using (var send = req.GetRequestStream())
+            {
+                send.Write(payload, 0, payload.Length);
+            }
+
+            using (var resp = (HttpWebResponse)req.GetResponse())
+            {
+                return ReadWebResponse(resp, out status, out contentType);
+            }
+        }
+        catch (WebException ex)
+        {
+            var resp = ex.Response as HttpWebResponse;
+            if (resp != null)
+            {
+                using (resp)
+                {
+                    return ReadWebResponse(resp, out status, out contentType);
+                }
+            }
+
+            status = 502;
+            return "{\"error\":\"모델 서버에 닿지 못했습니다.\"}";
+        }
+        catch (Exception)
+        {
+            status = 502;
+            return "{\"error\":\"모델 중계에 실패했습니다.\"}";
+        }
+    }
+
+    private static string ReadWebResponse(
+        HttpWebResponse resp,
+        out int status,
+        out string contentType)
+    {
+        status = (int)resp.StatusCode;
+        contentType = string.IsNullOrEmpty(resp.ContentType)
+            ? "application/json; charset=utf-8"
+            : resp.ContentType;
+        using (var rs = resp.GetResponseStream())
+        {
+            if (rs == null)
+            {
+                return "";
+            }
+            using (var reader = new StreamReader(rs, Encoding.UTF8))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+    }
+
+    private static bool IsAllowedLlmHost(string host)
+    {
+        var name = (host ?? "").ToLowerInvariant();
+        return name == "integrate.api.nvidia.com" ||
+            name == "api.nvidia.com" ||
+            name.EndsWith(".api.nvidia.com", StringComparison.Ordinal);
+    }
+
+    private static void EnableTls12()
+    {
+        const SecurityProtocolType tls12 = (SecurityProtocolType)3072;
+        try
+        {
+            ServicePointManager.SecurityProtocol = ServicePointManager.SecurityProtocol | tls12;
+        }
+        catch
+        {
+            // 이 PC 의 .NET 이 TLS 1.2 를 이미 켜 둔 경우
+        }
     }
 }
 

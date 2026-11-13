@@ -9,8 +9,15 @@
   const ENDPOINT_KEY = 'llm-endpoint';
   const MODEL_KEY = 'llm-model';
   const API_KEY_KEY = 'llm-api-key';
+  const PROXY_URL_KEY = 'llm-proxy-url';
   const AFTER_CMD_KEY = 'llm-after-command';
   const PROBE_KEY = 'llm-probe-device';
+  /**
+   * Cloudflare Worker 주소. 끝에 / 없이.
+   * 배포 후 나온 https://이름.workers.dev 를 여기 넣으면
+   * GitHub Pages 에서도 NVIDIA 를 쓴다.
+   */
+  const LLM_PROXY_URL_DEFAULT = '';
   const MAX_LOG_LINES = 80;
   const MAX_SCAN_LINES = 400;
   const CHROME_NEED_CLICK = 'CHROME_AI_NEED_CLICK';
@@ -35,6 +42,7 @@
       endpoint: readStore(ENDPOINT_KEY) || '',
       model: readStore(MODEL_KEY) || '',
       apiKey: readStore(API_KEY_KEY) || '',
+      proxyUrl: readStore(PROXY_URL_KEY) || LLM_PROXY_URL_DEFAULT,
       afterCommand: readStore(AFTER_CMD_KEY) !== '0',
       probeDevice: readStore(PROBE_KEY) !== '0',
     };
@@ -44,6 +52,7 @@
     writeStore(ENDPOINT_KEY, settings.endpoint || '');
     writeStore(MODEL_KEY, settings.model || '');
     writeStore(API_KEY_KEY, settings.apiKey || '');
+    writeStore(PROXY_URL_KEY, settings.proxyUrl || '');
     writeStore(AFTER_CMD_KEY, settings.afterCommand ? '1' : '0');
     writeStore(PROBE_KEY, settings.probeDevice === false ? '0' : '1');
   }
@@ -117,6 +126,9 @@
     }
     if (isHttpsPage() && isHttpLocal(settings.endpoint)) {
       return 'https 페이지에서는 http://127.0.0.1 Ollama 를 부를 수 없습니다. mcr_console.bat 으로 열거나 https API 를 쓰세요.';
+    }
+    if (needsNvidiaProxy(settings.endpoint) && !nvidiaProxyUrl(settings)) {
+      return 'NVIDIA 는 브라우저에서 직접 부를 수 없습니다. Cloudflare Worker 중계 주소를 넣거나, mcr_console.bat 으로 여세요.';
     }
     return '';
   }
@@ -763,14 +775,27 @@
       headers.Authorization = 'Bearer ' + settings.apiKey;
     }
 
+    let fetchUrl = endpoint;
+    if (needsNvidiaProxy(endpoint)) {
+      const proxy = nvidiaProxyUrl(settings);
+      if (!proxy) {
+        throw new Error(
+          'NVIDIA 는 브라우저에서 직접 부를 수 없습니다. Cloudflare Worker 중계 주소를 넣거나, mcr_console.bat 으로 여세요.'
+        );
+      }
+      fetchUrl = proxy;
+      headers['X-Llm-Target'] = endpoint;
+    }
+
     let response;
     try {
-      response = await fetch(endpoint, {
+      response = await fetch(fetchUrl, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
           model: String(settings.model || '').trim(),
           temperature: 0.2,
+          max_tokens: 1024,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userText },
@@ -778,7 +803,7 @@
         }),
       });
     } catch (err) {
-      throw new Error(toNetworkError(err));
+      throw new Error(toNetworkError(err, endpoint));
     }
 
     const raw = await response.text();
@@ -797,13 +822,23 @@
       throw new Error('모델 응답이 JSON 이 아닙니다.');
     }
 
-    const text = data?.choices?.[0]?.message?.content;
+    const message = data?.choices?.[0]?.message || {};
+    let text = message.content;
+    if (Array.isArray(text)) {
+      text = text.map((part) => (part && part.text) || part || '').join('');
+    }
+    if (!String(text || '').trim() && message.reasoning_content) {
+      text = message.reasoning_content;
+    }
     return String(text || '').trim();
   }
 
-  function toNetworkError(err) {
+  function toNetworkError(err, endpoint) {
     const message = err?.message || String(err);
     if (/failed to fetch|networkerror|load failed/i.test(message)) {
+      if (needsNvidiaProxy(endpoint) && !canUseLocalProxy()) {
+        return 'NVIDIA 중계에 닿지 못했습니다. 중계 주소가 https://이름.workers.dev 인지, Cloudflare Worker 가 배포됐는지 확인하세요.';
+      }
       return '모델 서버에 닿지 못했습니다. 주소, CORS, 그리고 https 페이지에서 http 를 쓰는지 확인하세요.';
     }
     return message;
@@ -831,6 +866,38 @@
     } catch {
       return false;
     }
+  }
+
+  function needsNvidiaProxy(endpoint) {
+    try {
+      const host = new URL(endpoint, location.href).hostname.toLowerCase();
+      return host === 'integrate.api.nvidia.com' ||
+        host === 'api.nvidia.com' ||
+        host.slice(-15) === '.api.nvidia.com';
+    } catch {
+      return false;
+    }
+  }
+
+  function canUseLocalProxy() {
+    return location.protocol === 'http:';
+  }
+
+  function readCloudProxyUrl(settings) {
+    const fromForm = String(settings?.proxyUrl || '').trim();
+    const fallback = String(LLM_PROXY_URL_DEFAULT || '').trim();
+    return (fromForm || fallback).replace(/\/+$/, '');
+  }
+
+  function nvidiaProxyUrl(settings) {
+    if (canUseLocalProxy()) {
+      return location.origin + '/api/llm-proxy';
+    }
+    const cloud = readCloudProxyUrl(settings);
+    if (!cloud) {
+      return '';
+    }
+    return cloud + '/api/llm-proxy';
   }
 
   function readStore(key) {

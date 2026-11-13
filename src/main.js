@@ -64,6 +64,7 @@ const els = {
   llmEndpoint: document.getElementById('txt-llm-endpoint'),
   llmModel: document.getElementById('txt-llm-model'),
   llmKey: document.getElementById('txt-llm-key'),
+  llmProxy: document.getElementById('txt-llm-proxy'),
   llmAfterCommand: document.getElementById('chk-llm-after-command'),
   llmProbeDevice: document.getElementById('chk-llm-probe-device'),
   llmLog: document.getElementById('llm-log'),
@@ -967,6 +968,9 @@ function bindLlmAnalyze() {
   if (els.llmKey) {
     els.llmKey.value = saved.apiKey;
   }
+  if (els.llmProxy) {
+    els.llmProxy.value = saved.proxyUrl || '';
+  }
   if (els.llmAfterCommand) {
     els.llmAfterCommand.checked = saved.afterCommand;
   }
@@ -980,6 +984,7 @@ function bindLlmAnalyze() {
 
   els.llmEndpoint?.addEventListener('change', persist);
   els.llmModel?.addEventListener('change', persist);
+  els.llmProxy?.addEventListener('change', persist);
   els.llmKey?.addEventListener('change', () => {
     persist();
     refreshLlmChromeNote();
@@ -1085,6 +1090,7 @@ function readLlmSettingsFromForm() {
     endpoint: String(els.llmEndpoint?.value || '').trim(),
     model: String(els.llmModel?.value || '').trim(),
     apiKey: String(els.llmKey?.value || '').trim(),
+    proxyUrl: String(els.llmProxy?.value || '').trim(),
     afterCommand: Boolean(els.llmAfterCommand?.checked),
     probeDevice: els.llmProbeDevice ? Boolean(els.llmProbeDevice.checked) : true,
   };
