@@ -1,7 +1,9 @@
 /**
  * 선택 칸의 최근 화면을 짧게 설명한다.
  * 기본은 NVIDIA. 주소·모델은 코드 기본값, 키는 Cloudflare Worker 비밀값.
- * 시험자가 칸을 채우지 않아도 되고, 키를 페이지에 넣지 않는다.
+ * [이 칸 분석] 은 마지막 명령 출력만 본다.
+ * [묻기] 는 이번 질문에만 답한다. 이전 LLM 답은 보내지 않는다.
+ * 다른 명령을 묻는 질문에는 화면 로그를 붙이지 않는다.
  * Worker 가 없으면 분석을 시작하지 않는다.
  * 질문·분석 때는 장비에 pwd 와 명령 목록만 보내 확인한다.
  */
@@ -24,14 +26,21 @@
   const MAX_ASK_LOG_LINES = 1200;
   const MAX_ASK_SCAN_LINES = 5000;
 
-  const SYSTEM_PROMPT =
+  const SYSTEM_ANALYZE =
     '당신은 AP/라우터 시리얼 콘솔을 보고 시험자를 돕는 조수입니다.\n' +
     '한국어로 3~8문장 설명하세요.\n' +
     '이번 메시지에 붙은 명령과 출력만 설명하세요. 이전 대화는 없습니다.\n' +
     '화면에 있는 이름과 숫자만 쓰세요. 없는 값은 추측하지 마세요.\n' +
     '화면 출력을 그대로 다시 붙이지 마세요. 번호 목록을 비워 두지 마세요.\n' +
-    '질문이 없으면 다른 명령을 제안하지 마세요.\n' +
-    '질문이 있으면 그 질문에 먼저 답하고, 이번 출력만 근거로 쓰세요.';
+    '다른 명령을 제안하지 마세요.';
+
+  const SYSTEM_ASK =
+    '당신은 AP/라우터 시리얼 콘솔 시험자를 돕는 조수입니다.\n' +
+    '한국어로 짧게 답하세요.\n' +
+    '이번 사용자 질문에만 답하세요. 이전 질문과 답은 없습니다.\n' +
+    '질문이 다른 확인 방법을 물으면 마지막 콘솔 명령을 설명하지 마세요.\n' +
+    '화면에 없는 항목을 물을 때는 화면을 이유로 거절하지 말고, 확인에 쓰는 명령을 알려 주세요.\n' +
+    '없는 값은 추측하지 마세요. 화면 원문을 다시 붙이지 마세요.';
 
   function withDefaults(settings) {
     const s = settings || {};
@@ -109,17 +118,28 @@
 
     const ask = String(question || '').trim();
     const hint = options || {};
-    const scanLimit = ask ? MAX_ASK_SCAN_LINES : MAX_SCAN_LINES;
-    const rawLog = pane.getRecentLog(scanLimit);
-    if (!rawLog.trim()) {
-      throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
-    }
-    const sliced = sliceLastCommand(rawLog, pane.lastCommand, logLineLimit(ask, settings));
-    const command = sliced.command;
-    const logText = sliced.text;
-    const probeFacts = await maybeProbeDevice(pane, ask, hint);
+    const howTo = Boolean(ask) && isHowToQuestion(ask);
+    let command = String(pane.lastCommand || '').trim();
+    let logText = '';
 
-    const answer = await requestChat(settings, buildUserText(pane, logText, ask, probeFacts, command));
+    if (!howTo) {
+      const scanLimit = ask ? MAX_ASK_SCAN_LINES : MAX_SCAN_LINES;
+      const rawLog = pane.getRecentLog(scanLimit);
+      if (!rawLog.trim()) {
+        throw new Error('화면에 분석할 로그가 없습니다. 장비를 연결하고 셸 프롬프트에서 다시 누르세요.');
+      }
+      const sliced = sliceLastCommand(rawLog, pane.lastCommand, logLineLimit(ask));
+      command = sliced.command;
+      logText = sliced.text;
+    }
+
+    const probeFacts = await maybeProbeDevice(pane, ask, hint);
+    const userText = buildUserText(pane, logText, ask, probeFacts, command, howTo);
+    const answer = await requestChat(
+      settings,
+      userText,
+      ask ? SYSTEM_ASK : SYSTEM_ANALYZE
+    );
     if (!answer) {
       throw new Error('모델이 빈 답을 돌려줬습니다.');
     }
@@ -140,27 +160,50 @@
     }
   }
 
-  function buildUserText(pane, logText, question, probeFacts, command) {
+  function buildUserText(pane, logText, question, probeFacts, command, howTo) {
     const cmd = command || pickCommand(pane, logText);
-    let userText =
-      '장비: ' + (pane.title || '콘솔') + '\n' +
-      '지금 설명할 명령: ' + (cmd || '(화면에서 추정)') + '\n' +
-      '이 명령의 출력만 있습니다. 다른 명령은 실행되지 않았습니다.\n\n';
-    if (question) {
-      userText += formatProbeFacts(probeFacts, question);
-    }
-    userText += '출력:\n' + logText + '\n\n';
-    if (question) {
-      userText += '질문: ' + question + '\n';
-      userText += '위 출력만 근거로 한국어로 답하세요. 출력을 그대로 복사하지 마세요.';
-    } else {
-      userText +=
+    if (!question) {
+      return (
+        '장비: ' + (pane.title || '콘솔') + '\n' +
+        '지금 설명할 명령: ' + (cmd || '(화면에서 추정)') + '\n' +
+        '이 명령의 출력만 있습니다. 다른 명령은 실행되지 않았습니다.\n\n' +
+        '출력:\n' + logText + '\n\n' +
         '위 명령과 출력만 한국어로 설명하세요.\n' +
         '- 이 출력이 무엇을 보여 주는지\n' +
         '- 지금 확인할 수 있는 값\n' +
-        '출력 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.';
+        '출력 원문을 다시 붙이지 마세요. 고정된 매뉴얼 문장을 쓰지 마세요.'
+      );
     }
+
+    let userText = '장비: ' + (pane.title || '콘솔') + '\n';
+    userText += formatProbeFacts(probeFacts, question);
+    userText += '질문: ' + question + '\n\n';
+    if (howTo) {
+      userText +=
+        '이번 질문에만 답하세요.\n' +
+        '마지막 콘솔 화면과 이전 명령은 질문과 무관합니다. 언급하지 마세요.\n' +
+        '확인에 쓰는 명령을 알려 주세요.';
+      return userText;
+    }
+
+    userText +=
+      '참고용 마지막 화면입니다. 질문이 이 출력에 대한 것일 때만 쓰세요. 아니면 무시하세요.\n' +
+      '마지막 명령: ' + (cmd || '(모름)') + '\n' +
+      '출력:\n' + logText + '\n\n' +
+      '이번 질문에만 한국어로 답하세요. 출력을 그대로 복사하지 마세요.';
     return userText;
+  }
+
+  /**
+   * 화면에 없는 값을 어떤 명령으로 볼지 묻는 질문.
+   * 이런 질문에는 마지막 콘솔 출력을 붙이지 않는다.
+   */
+  function isHowToQuestion(question) {
+    const ask = String(question || '');
+    if (!ask) {
+      return false;
+    }
+    return /어떤\s*명령|무슨\s*명령|어떤\s*커맨드|어떤\s*걸로|어떻게\s*(확인|보|알|하)|보려면|알려면|명령을\s*(사용|쓰|알려|치)|쓰면\s*되|사용하면\s*되|치면\s*되|which\s+command|how\s+to|how\s+do\s+i/i.test(ask);
   }
 
   function formatProbeFacts(facts, question) {
@@ -169,7 +212,10 @@
     }
     if (facts.skipped) {
       const why = typeof DutProbe !== 'undefined' ? DutProbe.skipLabel(facts) : '';
-      return '장비 확인: 못 함. ' + (why || facts.skipped) + ' 화면만 보고 답하세요.\n\n';
+      const fallback = question
+        ? '이번 질문에만 답하세요.'
+        : '화면만 보고 답하세요.';
+      return '장비 확인: 못 함. ' + (why || facts.skipped) + ' ' + fallback + '\n\n';
     }
 
     const lines = ['장비에서 직접 확인한 값:'];
@@ -386,7 +432,7 @@
     return Boolean(parsePromptCommand(line) || isIdlePrompt(line));
   }
 
-  async function requestChat(settings, userText) {
+  async function requestChat(settings, userText, systemPrompt) {
     settings = withDefaults(settings);
     const endpoint = String(settings.endpoint || '').trim();
     const headers = {
@@ -418,7 +464,7 @@
           temperature: 0.2,
           max_tokens: 1024,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt || SYSTEM_ANALYZE },
             { role: 'user', content: userText },
           ],
         }),
