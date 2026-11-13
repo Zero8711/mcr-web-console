@@ -421,7 +421,7 @@ if (els.oopsSample) {
     if (!pane || !pane.playOopsSample()) {
       return;
     }
-    pane.term.writeln('\x1b[33m[안내] Call Trace 샘플입니다. 약 1초 뒤 채팅·분석 칸을 보세요.\x1b[0m');
+    pane.term.writeln('\x1b[33m[안내] Call Trace 샘플입니다. 약 1초 뒤 채팅 칸을 보세요.\x1b[0m');
   });
 }
 
@@ -720,7 +720,6 @@ function postOopsHint(pane, hint) {
   const title = String(pane?.title || '').trim();
   const text = title ? title + '\n' + hint.text : hint.text;
   ShareUtil.appendChatLine(els.chatLog, '안내', text, '');
-  appendLlmLine('안내', text);
   if (!shareClient) {
     return;
   }

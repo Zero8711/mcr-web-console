@@ -252,7 +252,7 @@
 
     /**
      * COM 없이 가짜 Call Trace 를 화면에 넣고,
-     * 채팅·분석 칸 안내가 뜨는지 확인한다.
+     * 채팅 칸 안내가 뜨는지 확인한다.
      */
     playOopsSample() {
       if (!this.agingLog || typeof OopsHint === 'undefined') {
