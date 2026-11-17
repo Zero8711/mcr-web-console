@@ -31,21 +31,22 @@ function isAllowedOrigin(origin) {
   }
 }
 
-function corsHeaders(origin) {
+function corsHeaders(origin, request) {
+  const requested = request && request.headers.get('Access-Control-Request-Headers');
   return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Llm-Target',
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': requested || 'Authorization, Content-Type, X-Llm-Target',
     'Access-Control-Max-Age': '86400',
   };
 }
 
-function json(origin, status, obj) {
+function json(origin, status, obj, request) {
   return new Response(JSON.stringify(obj), {
     status: status,
     headers: Object.assign({
       'Content-Type': 'application/json; charset=utf-8',
-    }, corsHeaders(origin)),
+    }, corsHeaders(origin, request)),
   });
 }
 
@@ -66,17 +67,23 @@ export default {
 
     if (request.method === 'OPTIONS') {
       if (!isAllowedOrigin(origin)) {
-        return new Response(null, { status: 403 });
+        return new Response(null, {
+          status: 403,
+          headers: corsHeaders(origin, request),
+        });
       }
-      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(origin, request),
+      });
     }
 
     if (!isAllowedOrigin(origin)) {
-      return json(origin, 403, { error: '허용되지 않은 페이지입니다.' });
+      return json(origin, 403, { error: '허용되지 않은 페이지입니다.' }, request);
     }
 
     if (request.method !== 'POST') {
-      return json(origin, 405, { error: 'POST 만 됩니다.' });
+      return json(origin, 405, { error: 'POST 만 됩니다.' }, request);
     }
 
     const target = String(request.headers.get('X-Llm-Target') || '').trim();
@@ -84,11 +91,11 @@ export default {
     try {
       uri = new URL(target);
     } catch {
-      return json(origin, 400, { error: '모델 주소가 올바르지 않습니다.' });
+      return json(origin, 400, { error: '모델 주소가 올바르지 않습니다.' }, request);
     }
 
     if (uri.protocol !== 'https:' || !isAllowedHost(uri.hostname)) {
-      return json(origin, 400, { error: '이 모델 주소는 중계할 수 없습니다.' });
+      return json(origin, 400, { error: '이 모델 주소는 중계할 수 없습니다.' }, request);
     }
 
     const headers = {
@@ -100,7 +107,7 @@ export default {
     if (!auth) {
       return json(origin, 401, {
         error: 'API 키가 없습니다. Worker 비밀값 NVIDIA_API_KEY 를 넣으세요.',
-      });
+      }, request);
     }
     headers.Authorization = auth;
 
@@ -112,14 +119,14 @@ export default {
         body: await request.text(),
       });
     } catch {
-      return json(origin, 502, { error: '모델 서버에 닿지 못했습니다.' });
+      return json(origin, 502, { error: '모델 서버에 닿지 못했습니다.' }, request);
     }
 
     const body = await upstream.text();
     const type = upstream.headers.get('Content-Type') || 'application/json; charset=utf-8';
     return new Response(body, {
       status: upstream.status,
-      headers: Object.assign({ 'Content-Type': type }, corsHeaders(origin)),
+      headers: Object.assign({ 'Content-Type': type }, corsHeaders(origin, request)),
     });
   },
 };

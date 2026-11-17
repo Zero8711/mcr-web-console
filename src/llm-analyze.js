@@ -558,7 +558,11 @@
   function nvidiaProxyUrl(settings) {
     const cloud = readCloudProxyUrl(settings);
     if (cloud) {
-      return cloud.replace(/\/+$/, '') + '/api/llm-proxy';
+      const base = cloud.replace(/\/+$/, '');
+      if (/\/api\/llm-proxy$/i.test(base) || /\.workers\.dev$/i.test(base)) {
+        return base;
+      }
+      return base + '/api/llm-proxy';
     }
     if (canUseLocalProxy()) {
       return location.origin + '/api/llm-proxy';
