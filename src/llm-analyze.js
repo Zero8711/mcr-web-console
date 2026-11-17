@@ -19,7 +19,8 @@
    * Cloudflare Worker 주소. 끝에 / 없이.
    * 시험자는 중계 칸을 채우지 않는다. 키는 Worker 비밀값 NVIDIA_API_KEY.
    */
-  const LLM_PROXY_URL_DEFAULT = 'https://mcr-llm-proxy.grainz01.workers.dev';
+  const LLM_PROXY_URL_DEFAULT = 'https://mcr-llm-proxy.grains01.workers.dev';
+  const LLM_PROXY_URL_LEGACY = 'https://mcr-llm-proxy.grainz01.workers.dev';
   const MAX_LOG_LINES = 80;
   const MAX_SCAN_LINES = 400;
   const MAX_ASK_LOG_LINES = 1200;
@@ -47,7 +48,7 @@
       endpoint: String(s.endpoint || '').trim() || DEFAULT_ENDPOINT,
       model: String(s.model || '').trim() || DEFAULT_MODEL,
       apiKey: String(s.apiKey || '').trim(),
-      proxyUrl: String(s.proxyUrl || '').trim() || LLM_PROXY_URL_DEFAULT,
+      proxyUrl: normalizeProxyUrl(s.proxyUrl),
       probeDevice: s.probeDevice !== false,
     };
   }
@@ -574,10 +575,16 @@
     return location.protocol === 'http:';
   }
 
+  function normalizeProxyUrl(url) {
+    const text = String(url || '').trim().replace(/\/+$/, '');
+    if (!text || text === LLM_PROXY_URL_LEGACY) {
+      return LLM_PROXY_URL_DEFAULT;
+    }
+    return text;
+  }
+
   function readCloudProxyUrl(settings) {
-    const fromForm = String(settings?.proxyUrl || '').trim();
-    const fallback = String(LLM_PROXY_URL_DEFAULT || '').trim();
-    return (fromForm || fallback).replace(/\/+$/, '');
+    return normalizeProxyUrl(settings?.proxyUrl || LLM_PROXY_URL_DEFAULT);
   }
 
   function isCloudflareWorker(url) {
