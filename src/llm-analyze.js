@@ -17,10 +17,9 @@
   const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
   /**
    * Cloudflare Worker 주소. 끝에 / 없이.
-   * 예: https://mcr-llm-proxy.계정.workers.dev
-   * 여기 넣으면 시험자는 중계 칸을 채우지 않는다.
+   * 시험자는 중계 칸을 채우지 않는다. 키는 Worker 비밀값 NVIDIA_API_KEY.
    */
-  const LLM_PROXY_URL_DEFAULT = '';
+  const LLM_PROXY_URL_DEFAULT = 'https://mcr-llm-proxy.grainz01.workers.dev';
   const MAX_LOG_LINES = 80;
   const MAX_SCAN_LINES = 400;
   const MAX_ASK_LOG_LINES = 1200;
