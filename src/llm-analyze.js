@@ -434,14 +434,20 @@
   async function requestChat(settings, userText, systemPrompt) {
     settings = withDefaults(settings);
     const endpoint = String(settings.endpoint || '').trim();
-    const headers = {
-      'Content-Type': 'application/json',
+    const chatBody = {
+      model: String(settings.model || '').trim(),
+      temperature: 0.2,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: systemPrompt || SYSTEM_ANALYZE },
+        { role: 'user', content: userText },
+      ],
     };
-    if (settings.apiKey) {
-      headers.Authorization = 'Bearer ' + settings.apiKey;
-    }
 
+    const headers = {};
     let fetchUrl = endpoint;
+    let bodyText = JSON.stringify(chatBody);
+
     if (needsNvidiaProxy(endpoint)) {
       const proxy = nvidiaProxyUrl(settings);
       if (!proxy) {
@@ -450,7 +456,25 @@
         );
       }
       fetchUrl = proxy;
-      headers['X-Llm-Target'] = endpoint;
+      if (isCloudflareWorker(proxy)) {
+        // CORS 사전요청(OPTIONS)을 피한다. 커스텀 헤더·application/json 을 쓰지 않는다.
+        headers['Content-Type'] = 'text/plain';
+        bodyText = JSON.stringify({
+          target: endpoint,
+          payload: chatBody,
+        });
+      } else {
+        headers['Content-Type'] = 'application/json';
+        headers['X-Llm-Target'] = endpoint;
+        if (settings.apiKey) {
+          headers.Authorization = 'Bearer ' + settings.apiKey;
+        }
+      }
+    } else {
+      headers['Content-Type'] = 'application/json';
+      if (settings.apiKey) {
+        headers.Authorization = 'Bearer ' + settings.apiKey;
+      }
     }
 
     let response;
@@ -458,15 +482,7 @@
       response = await fetch(fetchUrl, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({
-          model: String(settings.model || '').trim(),
-          temperature: 0.2,
-          max_tokens: 1024,
-          messages: [
-            { role: 'system', content: systemPrompt || SYSTEM_ANALYZE },
-            { role: 'user', content: userText },
-          ],
-        }),
+        body: bodyText,
       });
     } catch (err) {
       throw new Error(toNetworkError(err, endpoint));
@@ -553,6 +569,14 @@
     const fromForm = String(settings?.proxyUrl || '').trim();
     const fallback = String(LLM_PROXY_URL_DEFAULT || '').trim();
     return (fromForm || fallback).replace(/\/+$/, '');
+  }
+
+  function isCloudflareWorker(url) {
+    try {
+      return new URL(url, location.href).hostname.toLowerCase().slice(-12) === '.workers.dev';
+    } catch {
+      return false;
+    }
   }
 
   function nvidiaProxyUrl(settings) {

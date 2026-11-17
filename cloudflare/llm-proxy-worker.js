@@ -7,10 +7,6 @@
  *
  * 브라우저가 키를 보내면 그 키를 쓰고, 안 보내면 이 비밀값을 쓴다.
  */
-const ALLOW_ORIGINS = [
-  'https://zero8711.github.io',
-];
-
 function isAllowedHost(host) {
   const name = String(host || '').toLowerCase();
   return name === 'integrate.api.nvidia.com' ||
@@ -19,11 +15,15 @@ function isAllowedHost(host) {
 }
 
 function isAllowedOrigin(origin) {
-  if (ALLOW_ORIGINS.indexOf(origin) >= 0) {
-    return true;
+  const text = String(origin || '').trim();
+  if (!text) {
+    return false;
   }
   try {
-    const url = new URL(origin);
+    const url = new URL(text);
+    if (url.protocol === 'https:' && url.hostname === 'zero8711.github.io') {
+      return true;
+    }
     const local = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
     return url.protocol === 'http:' && local && url.port === '8765';
   } catch {
@@ -36,7 +36,7 @@ function corsHeaders(origin, request) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': requested || 'Authorization, Content-Type, X-Llm-Target',
+    'Access-Control-Allow-Headers': requested || '*',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -61,17 +61,30 @@ function bearer(value) {
   return 'Bearer ' + text;
 }
 
+function readProxyBody(raw, headerTarget) {
+  const fallback = {
+    target: String(headerTarget || '').trim(),
+    payload: raw,
+  };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.target && parsed.payload) {
+      return {
+        target: String(parsed.target || '').trim(),
+        payload: JSON.stringify(parsed.payload),
+      };
+    }
+  } catch {
+    // 본문이 JSON 포장이 아니면 헤더의 주소를 쓴다.
+  }
+  return fallback;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
 
     if (request.method === 'OPTIONS') {
-      if (!isAllowedOrigin(origin)) {
-        return new Response(null, {
-          status: 403,
-          headers: corsHeaders(origin, request),
-        });
-      }
       return new Response(null, {
         status: 204,
         headers: corsHeaders(origin, request),
@@ -79,17 +92,23 @@ export default {
     }
 
     if (!isAllowedOrigin(origin)) {
-      return json(origin, 403, { error: '허용되지 않은 페이지입니다.' }, request);
+      return json(origin, 403, {
+        error: '허용되지 않은 페이지입니다.',
+        origin: origin || '(없음)',
+      }, request);
     }
 
     if (request.method !== 'POST') {
       return json(origin, 405, { error: 'POST 만 됩니다.' }, request);
     }
 
-    const target = String(request.headers.get('X-Llm-Target') || '').trim();
+    const parsedBody = readProxyBody(
+      await request.text(),
+      request.headers.get('X-Llm-Target')
+    );
     let uri;
     try {
-      uri = new URL(target);
+      uri = new URL(parsedBody.target);
     } catch {
       return json(origin, 400, { error: '모델 주소가 올바르지 않습니다.' }, request);
     }
@@ -116,7 +135,7 @@ export default {
       upstream = await fetch(uri.toString(), {
         method: 'POST',
         headers: headers,
-        body: await request.text(),
+        body: parsedBody.payload,
       });
     } catch {
       return json(origin, 502, { error: '모델 서버에 닿지 못했습니다.' }, request);
