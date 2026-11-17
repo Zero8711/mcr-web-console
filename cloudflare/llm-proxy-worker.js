@@ -200,7 +200,7 @@ export default {
           'Cache-Control': 'no-store',
           'Cross-Origin-Resource-Policy': 'cross-origin',
           'Content-Security-Policy':
-            "frame-ancestors https://zero8711.github.io http://127.0.0.1:8765 http://localhost:8765",
+            "frame-ancestors 'self' https://zero8711.github.io http://127.0.0.1:8765 http://localhost:8765",
         },
       });
     }

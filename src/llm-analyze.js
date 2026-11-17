@@ -603,6 +603,9 @@
   }
 
   function isSameOriginWorker(proxyUrl) {
+    if (location.hostname.toLowerCase().slice(-12) === '.workers.dev') {
+      return true;
+    }
     try {
       return location.origin === workerOrigin(proxyUrl);
     } catch {
@@ -611,7 +614,10 @@
   }
 
   async function postToWorkerSameOrigin(proxyUrl, bodyText) {
-    const response = await fetch(workerOrigin(proxyUrl) + '/', {
+    const postUrl = location.hostname.toLowerCase().slice(-12) === '.workers.dev'
+      ? location.origin + '/'
+      : workerOrigin(proxyUrl) + '/';
+    const response = await fetch(postUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: bodyText,
