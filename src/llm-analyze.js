@@ -457,18 +457,20 @@
       }
       fetchUrl = proxy;
       if (isCloudflareWorker(proxy)) {
-        // CORS 사전요청(OPTIONS)을 피한다. 커스텀 헤더·application/json 을 쓰지 않는다.
-        headers['Content-Type'] = 'text/plain';
         bodyText = JSON.stringify({
           target: endpoint,
           payload: chatBody,
         });
-      } else {
-        headers['Content-Type'] = 'application/json';
-        headers['X-Llm-Target'] = endpoint;
-        if (settings.apiKey) {
-          headers.Authorization = 'Bearer ' + settings.apiKey;
+        const bridged = await postViaWorkerBridge(proxy, bodyText);
+        if (!bridged.ok) {
+          throw new Error(toHttpError(bridged.status, bridged.text));
         }
+        return readAssistantText(bridged.text);
+      }
+      headers['Content-Type'] = 'application/json';
+      headers['X-Llm-Target'] = endpoint;
+      if (settings.apiKey) {
+        headers.Authorization = 'Bearer ' + settings.apiKey;
       }
     } else {
       headers['Content-Type'] = 'application/json';
@@ -577,6 +579,107 @@
     } catch {
       return false;
     }
+  }
+
+  let workerBridge = null;
+
+  function workerOrigin(url) {
+    return new URL(url, location.href).origin;
+  }
+
+  /**
+   * GitHub Pages 에서 Worker 로 가는 fetch 가 막히면,
+   * Worker 페이지를 iframe 으로 연 뒤 그 안에서 POST 한다.
+   */
+  function ensureWorkerBridge(proxyUrl) {
+    if (workerBridge && workerBridge.proxyUrl === proxyUrl && workerBridge.iframe.contentWindow) {
+      return workerBridge.ready;
+    }
+    if (workerBridge && workerBridge.iframe) {
+      workerBridge.iframe.remove();
+    }
+
+    const origin = workerOrigin(proxyUrl);
+    const iframe = document.createElement('iframe');
+    iframe.title = 'llm-proxy';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden;';
+
+    const ready = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('message', onReady);
+        reject(new Error(
+          'NVIDIA 중계 페이지를 열지 못했습니다. cloudflare/llm-proxy-worker.js 를 다시 Deploy 하세요.'
+        ));
+      }, 15000);
+
+      function onReady(event) {
+        if (event.origin !== origin) {
+          return;
+        }
+        if (!event.data || event.data.type !== 'llm-proxy-ready') {
+          return;
+        }
+        clearTimeout(timer);
+        window.removeEventListener('message', onReady);
+        resolve(iframe);
+      }
+
+      window.addEventListener('message', onReady);
+    });
+
+    iframe.src = origin + '/?bridge=1';
+    document.body.appendChild(iframe);
+    workerBridge = { proxyUrl: proxyUrl, iframe: iframe, ready: ready };
+    return ready;
+  }
+
+  function postViaWorkerBridge(proxyUrl, bodyText) {
+    return ensureWorkerBridge(proxyUrl).then((iframe) => {
+      return new Promise((resolve, reject) => {
+        const origin = workerOrigin(proxyUrl);
+        const id = String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+        const timer = setTimeout(() => {
+          window.removeEventListener('message', onResult);
+          reject(new Error('NVIDIA 중계 응답이 없습니다.'));
+        }, 180000);
+
+        function onResult(event) {
+          if (event.origin !== origin) {
+            return;
+          }
+          const msg = event.data || {};
+          if (msg.type !== 'llm-proxy-result' || msg.id !== id) {
+            return;
+          }
+          clearTimeout(timer);
+          window.removeEventListener('message', onResult);
+          if (msg.error) {
+            reject(new Error(msg.error));
+            return;
+          }
+          const status = Number(msg.status) || 0;
+          resolve({
+            ok: status >= 200 && status < 300,
+            status: status,
+            text: String(msg.text || ''),
+          });
+        }
+
+        window.addEventListener('message', onResult);
+        if (!iframe.contentWindow) {
+          clearTimeout(timer);
+          window.removeEventListener('message', onResult);
+          reject(new Error('NVIDIA 중계 페이지를 열지 못했습니다.'));
+          return;
+        }
+        iframe.contentWindow.postMessage({
+          type: 'llm-proxy',
+          id: id,
+          body: bodyText,
+        }, origin);
+      });
+    });
   }
 
   function nvidiaProxyUrl(settings) {

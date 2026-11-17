@@ -2,11 +2,58 @@
  * GitHub Pages 에서 NVIDIA API 를 쓰기 위한 HTTPS 중계.
  * Cloudflare Workers 대시보드에 이 파일 내용을 붙여 넣고 Deploy 한다.
  *
+ * GitHub Pages → Worker 로의 fetch 가 막히는 환경이 있어,
+ * ?bridge=1 페이지를 iframe 으로 열고 같은 주소끼리 POST 한다.
+ *
  * 키는 페이지에 넣지 않는다. Worker 설정 → Variables and Secrets 에서
  * 이름 NVIDIA_API_KEY, 종류 Secret 으로 NVIDIA 키를 넣는다.
- *
- * 브라우저가 키를 보내면 그 키를 쓰고, 안 보내면 이 비밀값을 쓴다.
  */
+const PARENT_ORIGIN = 'https://zero8711.github.io';
+
+const BRIDGE_HTML =
+  '<!DOCTYPE html>\n' +
+  '<html lang="ko"><head><meta charset="utf-8"><title>mcr llm bridge</title></head>\n' +
+  '<body><script>\n' +
+  '(function () {\n' +
+  '  function parentOk(origin) {\n' +
+  '    if (origin === ' + JSON.stringify(PARENT_ORIGIN) + ') {\n' +
+  '      return true;\n' +
+  '    }\n' +
+  '    try {\n' +
+  '      var url = new URL(origin);\n' +
+  '      var local = url.hostname === "127.0.0.1" || url.hostname === "localhost";\n' +
+  '      return url.protocol === "http:" && local && url.port === "8765";\n' +
+  '    } catch (err) {\n' +
+  '      return false;\n' +
+  '    }\n' +
+  '  }\n' +
+  '  window.addEventListener("message", function (event) {\n' +
+  '    if (!parentOk(event.origin)) {\n' +
+  '      return;\n' +
+  '    }\n' +
+  '    var msg = event.data || {};\n' +
+  '    if (msg.type !== "llm-proxy") {\n' +
+  '      return;\n' +
+  '    }\n' +
+  '    var replyTo = event.origin;\n' +
+  '    fetch("/", {\n' +
+  '      method: "POST",\n' +
+  '      headers: { "Content-Type": "text/plain" },\n' +
+  '      body: typeof msg.body === "string" ? msg.body : JSON.stringify(msg.body || {})\n' +
+  '    }).then(function (res) {\n' +
+  '      return res.text().then(function (text) {\n' +
+  '        event.source.postMessage({ type: "llm-proxy-result", id: msg.id, status: res.status, text: text }, replyTo);\n' +
+  '      });\n' +
+  '    }).catch(function (err) {\n' +
+  '      event.source.postMessage({ type: "llm-proxy-result", id: msg.id, error: String(err && err.message ? err.message : err) }, replyTo);\n' +
+  '    });\n' +
+  '  });\n' +
+  '  if (window.parent) {\n' +
+  '    window.parent.postMessage({ type: "llm-proxy-ready" }, "*");\n' +
+  '  }\n' +
+  '})();\n' +
+  '</script></body></html>\n';
+
 function isAllowedHost(host) {
   const name = String(host || '').toLowerCase();
   return name === 'integrate.api.nvidia.com' ||
@@ -14,7 +61,7 @@ function isAllowedHost(host) {
     name.slice(-15) === '.api.nvidia.com';
 }
 
-function isAllowedOrigin(origin) {
+function isAllowedOrigin(origin, request) {
   const text = String(origin || '').trim();
   if (!text) {
     return false;
@@ -25,7 +72,16 @@ function isAllowedOrigin(origin) {
       return true;
     }
     const local = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
-    return url.protocol === 'http:' && local && url.port === '8765';
+    if (url.protocol === 'http:' && local && url.port === '8765') {
+      return true;
+    }
+    if (request) {
+      const selfHost = new URL(request.url).hostname.toLowerCase();
+      if (url.protocol === 'https:' && url.hostname.toLowerCase() === selfHost) {
+        return true;
+      }
+    }
+    return false;
   } catch {
     return false;
   }
@@ -80,6 +136,18 @@ function readProxyBody(raw, headerTarget) {
   return fallback;
 }
 
+function wantsBridgePage(request) {
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get('bridge') === '1') {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -91,7 +159,18 @@ export default {
       });
     }
 
-    if (!isAllowedOrigin(origin)) {
+    if (request.method === 'GET' && wantsBridgePage(request)) {
+      return new Response(BRIDGE_HTML, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy':
+            "frame-ancestors https://zero8711.github.io http://127.0.0.1:8765 http://localhost:8765",
+        },
+      });
+    }
+
+    if (!isAllowedOrigin(origin, request)) {
       return json(origin, 403, {
         error: '허용되지 않은 페이지입니다.',
         origin: origin || '(없음)',
