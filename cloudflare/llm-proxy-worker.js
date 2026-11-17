@@ -9,6 +9,7 @@
  * 이름 NVIDIA_API_KEY, 종류 Secret 으로 NVIDIA 키를 넣는다.
  */
 const PARENT_ORIGIN = 'https://zero8711.github.io';
+const PAGES_ROOT = 'https://zero8711.github.io/mcr-web-console';
 
 const BRIDGE_HTML =
   '<!DOCTYPE html>\n' +
@@ -148,6 +149,38 @@ function wantsBridgePage(request) {
   return false;
 }
 
+async function proxyGithubPages(request) {
+  const url = new URL(request.url);
+  let path = url.pathname || '/';
+  if (path === '/') {
+    path = '/index.html';
+  }
+  if (path.indexOf('..') >= 0) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(PAGES_ROOT + path + url.search, {
+      method: 'GET',
+      redirect: 'follow',
+    });
+  } catch {
+    return new Response('GitHub Pages 에 닿지 못했습니다.', { status: 502 });
+  }
+
+  const headers = new Headers();
+  const type = upstream.headers.get('Content-Type');
+  if (type) {
+    headers.set('Content-Type', type);
+  }
+  headers.set('Cache-Control', 'no-store');
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: headers,
+  });
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -164,10 +197,16 @@ export default {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Cross-Origin-Resource-Policy': 'cross-origin',
           'Content-Security-Policy':
             "frame-ancestors https://zero8711.github.io http://127.0.0.1:8765 http://localhost:8765",
         },
       });
+    }
+
+    if (request.method === 'GET') {
+      return proxyGithubPages(request);
     }
 
     if (!isAllowedOrigin(origin, request)) {

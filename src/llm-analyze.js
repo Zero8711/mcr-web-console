@@ -461,6 +461,13 @@
           target: endpoint,
           payload: chatBody,
         });
+        if (isSameOriginWorker(proxy)) {
+          const local = await postToWorkerSameOrigin(proxy, bodyText);
+          if (!local.ok) {
+            throw new Error(toHttpError(local.status, local.text));
+          }
+          return readAssistantText(local.text);
+        }
         const bridged = await postViaWorkerBridge(proxy, bodyText);
         if (!bridged.ok) {
           throw new Error(toHttpError(bridged.status, bridged.text));
@@ -587,6 +594,36 @@
     return new URL(url, location.href).origin;
   }
 
+  function isWorkersDevOrigin(origin) {
+    try {
+      return new URL(origin).hostname.toLowerCase().slice(-12) === '.workers.dev';
+    } catch {
+      return false;
+    }
+  }
+
+  function isSameOriginWorker(proxyUrl) {
+    try {
+      return location.origin === workerOrigin(proxyUrl);
+    } catch {
+      return false;
+    }
+  }
+
+  async function postToWorkerSameOrigin(proxyUrl, bodyText) {
+    const response = await fetch(workerOrigin(proxyUrl) + '/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: bodyText,
+    });
+    const text = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: text,
+    };
+  }
+
   /**
    * GitHub Pages 에서 Worker 로 가는 fetch 가 막히면,
    * Worker 페이지를 iframe 으로 연 뒤 그 안에서 POST 한다.
@@ -614,7 +651,7 @@
       }, 15000);
 
       function onReady(event) {
-        if (event.origin !== origin) {
+        if (!isWorkersDevOrigin(event.origin)) {
           return;
         }
         if (!event.data || event.data.type !== 'llm-proxy-ready') {
@@ -628,7 +665,7 @@
       window.addEventListener('message', onReady);
     });
 
-    iframe.src = origin + '/?bridge=1';
+    iframe.src = origin + '/?bridge=1&v=20261117e';
     document.body.appendChild(iframe);
     workerBridge = { proxyUrl: proxyUrl, iframe: iframe, ready: ready };
     return ready;
@@ -645,7 +682,7 @@
         }, 180000);
 
         function onResult(event) {
-          if (event.origin !== origin) {
+          if (!isWorkersDevOrigin(event.origin)) {
             return;
           }
           const msg = event.data || {};
