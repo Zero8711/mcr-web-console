@@ -4,7 +4,9 @@ Chrome / Edge 에서 장비 COM 을 여는 Tera Term 스타일 화면입니다.
 
 **COM 은 항상 시험팀 PC 에만 붙습니다.** 개발팀은 링크만 받아 같은 화면을 봅니다.
 
-공식 주소: [https://zero8711.github.io/mcr-web-console/](https://zero8711.github.io/mcr-web-console/)
+공식 주소(화면·공유): [https://zero8711.github.io/mcr-web-console/](https://zero8711.github.io/mcr-web-console/)
+
+콘솔 LLM: 공개 Cloudflare Worker 는 쓰지 않습니다. 사내 중계 또는 본인 API 키가 필요합니다. · [짧은 메뉴얼](docs/llm-manual.md)
 
 변경 내역: [릴리스 노트](RELEASE.md)
 
@@ -21,7 +23,7 @@ Chrome / Edge 에서 장비 COM 을 여는 Tera Term 스타일 화면입니다.
 
 ![사내는 mcr_console.bat, 사외는 GitHub Pages](docs/readme-where.png)
 
-사내에서도 GitHub 링크만 쓸 수는 있습니다. 다만 회사망이 P2P 를 막으면 접속이 실패하거나, 콘솔 내용이 사외 중계를 탈 수 있습니다. 사내 로그를 망 안에 두려면 `mcr_console.bat` 을 쓰세요.
+사내에서도 GitHub 링크만 쓸 수는 있습니다. 회사망이 P2P 를 막으면 접속이 실패합니다. 공개 TURN 으로 콘솔을 보내지 않으니, 사내 로그는 `mcr_console.bat` 을 쓰세요.
 
 ---
 
@@ -195,7 +197,7 @@ Custom domain / CNAME 은 넣지 마세요.
 - 사내: 링크가 `http://사내IP:8765/...` 인지 봅니다. Pages `github.io` 링크는 사내 전용이 아닙니다.
 - 같은 공유기 안: 노트북 IP 링크를 쓰세요. UPnP WAN 주소는 안에서 시간 초과가 나는 경우가 많습니다.
 - 다른 자리 사내망: UPnP 또는 공유기 사내 IP + 포트포워드가 필요합니다.
-- 사외: 회사망이 WebRTC 를 막으면 Pages 공유가 실패할 수 있습니다. 그때는 `mcr_console.bat` + VPN 을 씁니다.
+- 사외: 회사망이 WebRTC P2P 를 막으면 Pages 공유가 실패합니다. 공개 TURN 은 쓰지 않습니다. 그때는 `mcr_console.bat` + VPN 을 씁니다.
 
 **COM 이 안 열림**
 

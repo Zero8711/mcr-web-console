@@ -1014,7 +1014,7 @@ function refreshLlmStatusNote() {
   }
   els.llmTrialNote.textContent = settings.apiKey
     ? '입력한 API 키로 모델을 씁니다.'
-    : 'NVIDIA 기본 모델을 씁니다. 주소·모델·키는 넣지 않아도 됩니다.';
+    : 'NVIDIA 기본 모델을 씁니다. 공개 중계는 쓰지 않으니 사내 중계 주소를 넣으세요.';
 }
 
 function readLlmSettingsFromForm() {

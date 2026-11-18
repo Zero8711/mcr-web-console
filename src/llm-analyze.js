@@ -1,10 +1,11 @@
 /**
  * 선택 칸의 최근 화면을 짧게 설명한다.
- * 기본은 NVIDIA. 주소·모델은 코드 기본값, 키는 Cloudflare Worker 비밀값.
+ * 기본은 NVIDIA. 주소·모델은 코드 기본값.
+ * 공개 Cloudflare Worker 는 쓰지 않는다. 중계는 칸에 넣은 주소 또는 사내 중계만.
  * [이 칸 분석] 은 마지막 명령 출력만 본다.
  * [묻기] 는 이번 질문에만 답한다. 이전 LLM 답은 보내지 않는다.
  * 다른 명령을 묻는 질문에는 화면 로그를 붙이지 않는다.
- * Worker 가 없으면 분석을 시작하지 않는다.
+ * 사내 중계가 없으면 분석을 시작하지 않는다.
  * 질문·분석 때는 장비에 pwd 와 명령 목록만 보내 확인한다.
  */
 (function (global) {
@@ -16,11 +17,12 @@
   const DEFAULT_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions';
   const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
   /**
-   * Cloudflare Worker 주소. 끝에 / 없이.
-   * 시험자는 중계 칸을 채우지 않는다. 키는 Worker 비밀값 NVIDIA_API_KEY.
+   * 공개 배포했던 Cloudflare Worker. 저장소가 Public 이어도 이 주소는 쓰지 않는다.
    */
-  const LLM_PROXY_URL_DEFAULT = 'https://mcr-llm-proxy.grains01.workers.dev';
-  const LLM_PROXY_URL_LEGACY = 'https://mcr-llm-proxy.grainz01.workers.dev';
+  const RETIRED_PROXY_HOSTS = [
+    'mcr-llm-proxy.grains01.workers.dev',
+    'mcr-llm-proxy.grainz01.workers.dev',
+  ];
   const MAX_LOG_LINES = 80;
   const MAX_SCAN_LINES = 400;
   const MAX_ASK_LOG_LINES = 1200;
@@ -54,6 +56,9 @@
   }
 
   function loadSettings() {
+    if (isRetiredPublicProxy(readStore(PROXY_URL_KEY))) {
+      writeStore(PROXY_URL_KEY, '');
+    }
     return withDefaults({
       endpoint: readStore(ENDPOINT_KEY),
       model: readStore(MODEL_KEY),
@@ -98,7 +103,7 @@
       return 'https 페이지에서는 http://127.0.0.1 Ollama 를 부를 수 없습니다. mcr_console.bat 으로 열거나 https API 를 쓰세요.';
     }
     if (needsNvidiaProxy(s.endpoint) && !nvidiaProxyUrl(s)) {
-      return 'NVIDIA 중계가 없습니다. Cloudflare Worker 를 배포하고 중계 주소를 넣으세요.';
+      return 'NVIDIA 중계가 없습니다. 사내 중계 주소 또는 본인 API 키를 넣으세요.';
     }
     if (!canUseRemoteLlm(s)) {
       return '콘솔 LLM 은 NVIDIA 중계 또는 API 키가 필요합니다.';
@@ -453,7 +458,7 @@
       const proxy = nvidiaProxyUrl(settings);
       if (!proxy) {
         throw new Error(
-          'NVIDIA 는 브라우저에서 직접 부를 수 없습니다. Cloudflare Worker 중계 주소를 넣거나, mcr_console.bat 으로 여세요.'
+          'NVIDIA 는 브라우저에서 직접 부를 수 없습니다. 사내 중계 주소를 넣거나, mcr_console.bat 으로 여세요.'
         );
       }
       fetchUrl = proxy;
@@ -529,7 +534,7 @@
     const message = err?.message || String(err);
     if (/failed to fetch|networkerror|load failed/i.test(message)) {
       if (needsNvidiaProxy(endpoint) && !canUseLocalProxy()) {
-        return 'NVIDIA 중계에 닿지 못했습니다. 중계 주소가 https://이름.workers.dev 인지, Cloudflare Worker 가 배포됐는지 확인하세요.';
+        return 'NVIDIA 중계에 닿지 못했습니다. 중계 주소와 사내 망 허용을 확인하세요.';
       }
       return '모델 서버에 닿지 못했습니다. 주소, CORS, 그리고 https 페이지에서 http 를 쓰는지 확인하세요.';
     }
@@ -575,16 +580,25 @@
     return location.protocol === 'http:';
   }
 
+  function isRetiredPublicProxy(url) {
+    try {
+      const host = new URL(url, 'https://example.invalid').hostname.toLowerCase();
+      return RETIRED_PROXY_HOSTS.indexOf(host) >= 0;
+    } catch {
+      return false;
+    }
+  }
+
   function normalizeProxyUrl(url) {
     const text = String(url || '').trim().replace(/\/+$/, '');
-    if (!text || text === LLM_PROXY_URL_LEGACY) {
-      return LLM_PROXY_URL_DEFAULT;
+    if (!text || isRetiredPublicProxy(text)) {
+      return '';
     }
     return text;
   }
 
   function readCloudProxyUrl(settings) {
-    return normalizeProxyUrl(settings?.proxyUrl || LLM_PROXY_URL_DEFAULT);
+    return normalizeProxyUrl(settings?.proxyUrl);
   }
 
   function isCloudflareWorker(url) {
@@ -773,6 +787,6 @@
     maxLogLines: MAX_LOG_LINES,
     defaultEndpoint: DEFAULT_ENDPOINT,
     defaultModel: DEFAULT_MODEL,
-    defaultProxyUrl: LLM_PROXY_URL_DEFAULT,
+    defaultProxyUrl: '',
   };
 })(window);

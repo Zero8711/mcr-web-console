@@ -941,14 +941,10 @@
   }
 
   /**
-   * STUN 으로 직접 붙고, 회사망 등에서 막히면 공개 TURN 으로 이어 준다.
-   * 출장 중 링크 하나로 사내 PC 가 보게 하려면 TURN 이 필요하다.
+   * STUN 으로 브라우저끼리 직접 붙는다.
+   * 공개 TURN 은 쓰지 않는다. 회사망이 P2P 를 막으면 사내 중계(mcr_console.bat)를 쓴다.
    */
   function webRtcPeerOptions() {
-    const turnAuth = {
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    };
     return {
       host: '0.peerjs.com',
       port: 443,
@@ -958,10 +954,6 @@
         iceServers: [
           { urls: 'stun:stun.cloudflare.com:3478' },
           { urls: 'stun:stun.l.google.com:19302' },
-          Object.assign({ urls: 'turn:openrelay.metered.ca:80' }, turnAuth),
-          Object.assign({ urls: 'turn:openrelay.metered.ca:443' }, turnAuth),
-          Object.assign({ urls: 'turn:openrelay.metered.ca:443?transport=tcp' }, turnAuth),
-          Object.assign({ urls: 'turns:openrelay.metered.ca:443?transport=tcp' }, turnAuth),
         ],
       },
     };

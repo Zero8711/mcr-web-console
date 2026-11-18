@@ -1,12 +1,10 @@
 /**
- * GitHub Pages 에서 NVIDIA API 를 쓰기 위한 HTTPS 중계.
- * Cloudflare Workers 대시보드에 이 파일 내용을 붙여 넣고 Deploy 한다.
+ * 사내 HTTPS 중계 샘플. 공개 workers.dev 로 배포하지 않는다.
  *
  * GitHub Pages → Worker 로의 fetch 가 막히는 환경이 있어,
  * ?bridge=1 페이지를 iframe 으로 열고 같은 주소끼리 POST 한다.
  *
- * 키는 페이지에 넣지 않는다. Worker 설정 → Variables and Secrets 에서
- * 이름 NVIDIA_API_KEY, 종류 Secret 으로 NVIDIA 키를 넣는다.
+ * 키는 페이지에 넣지 않는다. 중계 서버 비밀값 NVIDIA_API_KEY 로 둔다.
  */
 const PARENT_ORIGIN = 'https://zero8711.github.io';
 const PAGES_ROOT = 'https://zero8711.github.io/mcr-web-console';
